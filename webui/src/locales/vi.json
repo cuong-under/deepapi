@@ -554,6 +554,18 @@
         "warning_title": "Lưu ý quan trọng",
         "warning_1": "Quá trình cập nhật sẽ tự động tạo bản sao lưu",
         "warning_2": "Hệ thống sẽ khởi động lại sau khi cập nhật hoàn tất",
-        "warning_3": "Các plugin tùy chỉnh sẽ được giữ nguyên"
+        "warning_3": "Các plugin tùy chỉnh sẽ được giữ nguyên",
+        "stage_checking": "Đang kiểm tra phiên bản mới...",
+        "stage_downloading": "Đang tải xuống bản cập nhật...",
+        "stage_backing_up": "Đang tạo bản sao lưu...",
+        "stage_installing": "Đang cài đặt bản cập nhật...",
+        "stage_verifying": "Đang xác minh cài đặt...",
+        "stage_complete": "Hoàn tất cài đặt!",
+        "success_title": "Cập nhật thành công!",
+        "success_message": "Bản cập nhật đã được cài đặt. Vui lòng khởi động lại server để áp dụng thay đổi.",
+        "restart_instructions": "Hướng dẫn khởi động lại",
+        "restart_step1": "Dừng server hiện tại (Ctrl+C trong terminal)",
+        "restart_step2": "Chạy lại lệnh: .\\ds2api.exe",
+        "restart_step3": "Làm mới trang web này để thấy phiên bản mới"
     }
 }

@@ -222,11 +222,74 @@ export default function UpdateContainer({ authFetch }) {
               </div>
             </div>
 
+            {/* Stage indicator */}
+            <div className="bg-black/30 rounded p-3">
+              <div className="flex items-center gap-2 text-sm">
+                {updateStatus.stage === 'checking' && (
+                  <>
+                    <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />
+                    <span className="text-cyan-400">{t('update.stage_checking')}</span>
+                  </>
+                )}
+                {updateStatus.stage === 'downloading' && (
+                  <>
+                    <Download className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <span className="text-cyan-400">{t('update.stage_downloading')}</span>
+                  </>
+                )}
+                {updateStatus.stage === 'backing_up' && (
+                  <>
+                    <Package className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <span className="text-cyan-400">{t('update.stage_backing_up')}</span>
+                  </>
+                )}
+                {updateStatus.stage === 'installing' && (
+                  <>
+                    <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />
+                    <span className="text-cyan-400">{t('update.stage_installing')}</span>
+                  </>
+                )}
+                {updateStatus.stage === 'verifying' && (
+                  <>
+                    <CheckCircle className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <span className="text-cyan-400">{t('update.stage_verifying')}</span>
+                  </>
+                )}
+                {updateStatus.stage === 'complete' && (
+                  <>
+                    <CheckCircle className="w-4 h-4 text-green-400" />
+                    <span className="text-green-400">{t('update.stage_complete')}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
             {updateStatus.error && (
               <div className="bg-red-500/10 border border-red-500/30 rounded p-3">
                 <p className="text-red-400 text-sm">{updateStatus.error}</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Success Message - Restart Required */}
+      {updateStatus && updateStatus.stage === 'complete' && !isUpdating && (
+        <div className="bg-green-500/10 border-2 border-green-500/30 rounded-lg p-6 glow-green">
+          <div className="flex items-start gap-3">
+            <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-green-400 font-bold text-lg mb-2">{t('update.success_title')}</p>
+              <p className="text-green-400/80 text-sm mb-4">{t('update.success_message')}</p>
+              <div className="bg-black/30 rounded p-3 border border-green-500/20">
+                <p className="text-xs text-green-400/60 mb-2">{t('update.restart_instructions')}:</p>
+                <ol className="list-decimal list-inside space-y-1 text-sm text-green-400">
+                  <li>{t('update.restart_step1')}</li>
+                  <li>{t('update.restart_step2')}</li>
+                  <li>{t('update.restart_step3')}</li>
+                </ol>
+              </div>
+            </div>
           </div>
         </div>
       )}
