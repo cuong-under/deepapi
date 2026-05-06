@@ -179,10 +179,26 @@ func (m *Manager) InstallUpdate(ctx context.Context, archivePath string) error {
 	}
 
 	// Find new binary in extracted files
-	newBinaryPath := filepath.Join(tempDir, "ds2api.exe")
-	if _, err := os.Stat(newBinaryPath); os.IsNotExist(err) {
+	// Archive may contain a subdirectory, so we need to search for the binary
+	var newBinaryPath string
+	err := filepath.Walk(tempDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && (info.Name() == "ds2api.exe" || info.Name() == "ds2api") {
+			newBinaryPath = path
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("search for binary: %w", err)
+	}
+	if newBinaryPath == "" {
 		return fmt.Errorf("new binary not found in archive")
 	}
+
+	config.Logger.Info("[update] found binary", "path", newBinaryPath)
 
 	// Replace current binary (atomic operation)
 	exePath, err := os.Executable()
