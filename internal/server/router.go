@@ -90,8 +90,9 @@ func NewApp() (*App, error) {
 	}
 
 	// Initialize update manager
+	currentVersion := readVersion()
 	updateManager := updatepkg.NewManager(
-		"v1.0.0",           // Current version - TODO: get from build info
+		currentVersion,
 		"CJackHwang/ds2api", // GitHub repo (correct repo name)
 	)
 
@@ -221,6 +222,27 @@ func NewApp() (*App, error) {
 		PluginManager: pluginManager,
 		UpdateManager: updateManager,
 	}, nil
+}
+
+// readVersion reads version from VERSION file or returns default
+func readVersion() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "v1.0.0"
+	}
+
+	versionFile := filepath.Join(filepath.Dir(exePath), "VERSION")
+	data, err := os.ReadFile(versionFile)
+	if err != nil {
+		return "v1.0.0"
+	}
+
+	version := strings.TrimSpace(string(data))
+	if version == "" {
+		return "v1.0.0"
+	}
+
+	return version
 }
 
 func timeout(d time.Duration) func(http.Handler) http.Handler {

@@ -71,6 +71,11 @@ func (m *Manager) GetCurrentVersion() string {
 	return m.currentVersion
 }
 
+// SetCurrentVersion updates current version
+func (m *Manager) SetCurrentVersion(version string) {
+	m.currentVersion = version
+}
+
 // EnsureDirectories ensures required directories exist
 func (m *Manager) EnsureDirectories() error {
 	dirs := []string{m.BackupDir, m.pluginsDir, m.dataDir}
@@ -221,6 +226,12 @@ func (m *Manager) InstallUpdate(ctx context.Context, archivePath string) error {
 
 	// Remove old binary
 	os.Remove(oldBinaryPath)
+
+	// Update version file
+	versionFile := filepath.Join(filepath.Dir(exePath), "VERSION")
+	if err := os.WriteFile(versionFile, []byte(m.currentVersion), 0644); err != nil {
+		config.Logger.Warn("[update] failed to write version file", "error", err)
+	}
 
 	// Cleanup temp directory
 	os.RemoveAll(tempDir)
