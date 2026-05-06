@@ -93,7 +93,7 @@ const LandingPage = ({ onEnter }) => {
 
             <div className="landing-content">
                 <header className="mb-12">
-                    <h1 className="logo-text">DS2API</h1>
+                    <h1 className="logo-text">DeepAPI</h1>
                     <p className="text-gray-400 text-xl max-w-2xl mx-auto leading-relaxed">
                         DeepSeek to OpenAI & Claude Compatible API Interface
                     </p>
@@ -138,7 +138,7 @@ const LandingPage = ({ onEnter }) => {
                 </div>
 
                 <footer className="mt-20 opacity-40 text-sm">
-                    <p>&copy; 2026 DS2API Project. Designed for flexibility & performance.</p>
+                    <p>&copy; 2026 DeepAPI Project. Designed for flexibility & performance.</p>
                 </footer>
             </div>
         </div>

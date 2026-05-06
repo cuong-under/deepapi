@@ -12,12 +12,14 @@ import {
     Users,
     Globe,
     History,
-    Loader2
+    Loader2,
+    BarChart3
 } from 'lucide-react'
 import clsx from 'clsx'
 
 import LanguageToggle from '../components/LanguageToggle'
 import { useI18n } from '../i18n'
+import logoImage from '/ds2api-favicon.svg'
 
 const AccountManagerContainer = lazy(() => import('../features/account/AccountManagerContainer'))
 const ApiTesterContainer = lazy(() => import('../features/apiTester/ApiTesterContainer'))
@@ -26,6 +28,7 @@ const BatchImport = lazy(() => import('../components/BatchImport'))
 const VercelSyncContainer = lazy(() => import('../features/vercel/VercelSyncContainer'))
 const SettingsContainer = lazy(() => import('../features/settings/SettingsContainer'))
 const ProxyManagerContainer = lazy(() => import('../features/proxy/ProxyManagerContainer'))
+const AnalyticsContainer = lazy(() => import('../features/analytics/AnalyticsContainer'))
 
 function TabLoadingFallback({ label }) {
     return (
@@ -47,10 +50,11 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
     const navItems = [
         { id: 'accounts', label: t('nav.accounts.label'), icon: Users, description: t('nav.accounts.desc') },
         { id: 'proxies', label: t('nav.proxies.label'), icon: Globe, description: t('nav.proxies.desc') },
+        { id: 'analytics', label: t('nav.analytics.label'), icon: BarChart3, description: t('nav.analytics.desc') },
         { id: 'test', label: t('nav.test.label'), icon: Server, description: t('nav.test.desc') },
         { id: 'history', label: t('nav.history.label'), icon: History, description: t('nav.history.desc') },
         { id: 'import', label: t('nav.import.label'), icon: Upload, description: t('nav.import.desc') },
-        { id: 'vercel', label: t('nav.vercel.label'), icon: Cloud, description: t('nav.vercel.desc') },
+        // { id: 'vercel', label: t('nav.vercel.label'), icon: Cloud, description: t('nav.vercel.desc') },
         { id: 'settings', label: t('nav.settings.label'), icon: SettingsIcon, description: t('nav.settings.desc') },
     ]
 
@@ -113,6 +117,8 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                 return <AccountManagerContainer config={config} onRefresh={fetchConfig} onMessage={showMessage} authFetch={authFetch} />
             case 'proxies':
                 return <ProxyManagerContainer config={config} onRefresh={fetchConfig} onMessage={showMessage} authFetch={authFetch} />
+            case 'analytics':
+                return <AnalyticsContainer onMessage={showMessage} authFetch={authFetch} />
             case 'test':
                 return <ApiTesterContainer config={config} onMessage={showMessage} authFetch={authFetch} />
             case 'history':
@@ -143,10 +149,12 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
             )}>
                 <div className="p-6">
                     <div className="flex items-center gap-2.5 font-bold text-xl text-foreground tracking-tight">
-                        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20">
-                            <LayoutDashboard className="w-5 h-5" />
-                        </div>
-                        <span>DS2API</span>
+                        <img
+                            src={logoImage}
+                            alt="DeepAPI Logo"
+                            className="w-8 h-8 rounded-lg shadow-lg shadow-primary/20"
+                        />
+                        <span>DeepAPI</span>
                     </div>
                     <div className="flex items-center justify-between mt-2">
                         <p className="text-[10px] text-muted-foreground font-semibold tracking-[0.1em] uppercase opacity-60 px-1">{t('sidebar.onlineAdminConsole')}</p>
@@ -212,6 +220,28 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                                 </a>
                             )}
                         </div>
+                        <a
+                            href="https://tm.cuong.tech"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full h-10 flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 text-xs font-medium text-primary hover:bg-primary/20 hover:border-primary/50 transition-all glow-cyan"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            Tạo mail nhanh
+                        </a>
+                        <a
+                            href="https://vibekit.codes"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full h-10 flex items-center justify-center gap-2 rounded-lg border border-neon-purple/30 bg-neon-purple/10 text-xs font-medium text-neon-purple hover:bg-neon-purple/20 hover:border-neon-purple/50 transition-all glow-pink"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Skill hỗ trợ Vibecode
+                        </a>
                         <button
                             onClick={onLogout}
                             className="w-full h-10 flex items-center justify-center gap-2 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/20 transition-all"
@@ -226,10 +256,12 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 <header className="lg:hidden h-14 flex items-center justify-between px-4 border-b border-border bg-card">
                     <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded bg-primary flex items-center justify-center text-primary-foreground text-[10px]">
-                            <LayoutDashboard className="w-3.5 h-3.5" />
-                        </div>
-                        <span className="font-semibold text-sm">DS2API</span>
+                        <img
+                            src={logoImage}
+                            alt="DeepAPI Logo"
+                            className="w-6 h-6 rounded"
+                        />
+                        <span className="font-semibold text-sm">DeepAPI</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <LanguageToggle />
@@ -265,10 +297,37 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                         )}
 
                         <div className="animate-in fade-in duration-500">
-                            <Suspense fallback={<TabLoadingFallback label={activeNavItem?.label || 'DS2API'} />}>
+                            <Suspense fallback={<TabLoadingFallback label={activeNavItem?.label || 'DeepAPI'} />}>
                                 {renderTab()}
                             </Suspense>
                         </div>
+
+                        {/* Footer - Community Info */}
+                        <footer className="mt-12 pt-8 border-t border-border/50">
+                            <div className="text-center space-y-3">
+                                <div className="inline-block px-4 py-2 rounded-lg border border-primary/30 bg-primary/5 glow-cyan">
+                                    <p className="text-sm text-muted-foreground font-medium mb-1">
+                                        Dự án phi lợi nhuận cho cộng đồng
+                                    </p>
+                                    <p className="text-lg font-bold text-primary text-glow-cyan tracking-wide">
+                                        VIBECODE VIETNAM
+                                    </p>
+                                </div>
+                                <div className="flex items-center justify-center gap-3 text-sm text-muted-foreground">
+                                    <span className="font-semibold text-foreground">Cuongunder</span>
+                                    <span className="opacity-50">•</span>
+                                    <a
+                                        href="https://t.me/tiensinhcc"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-primary hover:text-primary/80 transition-colors font-medium inline-flex items-center gap-1 hover:glow-cyan"
+                                    >
+                                        <span>Telegram:</span>
+                                        <span className="font-bold">@tiensinhcc</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </footer>
                     </div>
                 </div>
             </main>

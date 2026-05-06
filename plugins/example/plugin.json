@@ -1,0 +1,13 @@
+{
+  "name": "example",
+  "version": "1.0.0",
+  "description": "Example plugin for testing",
+  "author": "cuongunder",
+  "entry_point": "internal",
+  "webui_path": "",
+  "permissions": [
+    "read:config"
+  ],
+  "dependencies": [],
+  "enabled": true
+}

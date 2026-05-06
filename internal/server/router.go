@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"ds2api/internal/config"
 	dsclient "ds2api/internal/deepseek/client"
 	"ds2api/internal/httpapi/admin"
+	"ds2api/internal/httpapi/admin/analytics"
 	"ds2api/internal/httpapi/claude"
 	"ds2api/internal/httpapi/gemini"
 	"ds2api/internal/httpapi/openai/chat"
@@ -28,15 +30,21 @@ import (
 	"ds2api/internal/httpapi/openai/responses"
 	"ds2api/internal/httpapi/openai/shared"
 	"ds2api/internal/httpapi/requestbody"
+	"ds2api/internal/plugin"
 	"ds2api/internal/webui"
+
+	// Import plugins to trigger init() registration
+	_ "ds2api/plugins/analytics"
+	_ "ds2api/plugins/example"
 )
 
 type App struct {
-	Store    *config.Store
-	Pool     *account.Pool
-	Resolver *auth.Resolver
-	DS       *dsclient.Client
-	Router   http.Handler
+	Store         *config.Store
+	Pool          *account.Pool
+	Resolver      *auth.Resolver
+	DS            *dsclient.Client
+	Router        http.Handler
+	PluginManager *plugin.Manager
 }
 
 func NewApp() (*App, error) {
@@ -60,6 +68,24 @@ func NewApp() (*App, error) {
 		config.Logger.Warn("[chat_history] unavailable", "path", chatHistoryStore.Path(), "error", err)
 	}
 
+	// Initialize plugin manager
+	pluginsDir := filepath.Join(filepath.Dir(config.ConfigPath()), "plugins")
+	pluginDeps := &plugin.Dependencies{
+		Store:       store,
+		ChatHistory: chatHistoryStore,
+	}
+	pluginManager := plugin.NewManager(pluginsDir, pluginDeps)
+
+	// Discover and load plugins
+	ctx := context.Background()
+	if err := pluginManager.DiscoverPlugins(ctx); err != nil {
+		config.Logger.Warn("[plugin] failed to discover plugins", "error", err)
+	} else {
+		if err := pluginManager.LoadAllPluginsFromRegistry(ctx); err != nil {
+			config.Logger.Warn("[plugin] failed to load plugins", "error", err)
+		}
+	}
+
 	modelsHandler := &shared.ModelsHandler{Store: store}
 	chatHandler := &chat.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
 	responsesHandler := &responses.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
@@ -68,6 +94,51 @@ func NewApp() (*App, error) {
 	claudeHandler := &claude.Handler{Store: store, Auth: resolver, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
 	geminiHandler := &gemini.Handler{Store: store, Auth: resolver, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
 	adminHandler := &admin.Handler{Store: store, Pool: pool, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
+
+	// Load pricing directly from config file
+	var pricing config.PricingConfig
+	configPath := config.ConfigPath()
+	config.Logger.Info("[router] loading pricing", "config_path", configPath)
+	if configPath != "" {
+		if rawConfig, err := os.ReadFile(configPath); err == nil {
+			config.Logger.Info("[router] read config file", "size", len(rawConfig))
+
+			// Parse JSON to extract pricing section directly
+			var rawJSON map[string]json.RawMessage
+			if err := json.Unmarshal(rawConfig, &rawJSON); err == nil {
+				if pricingRaw, ok := rawJSON["pricing"]; ok {
+					if err := json.Unmarshal(pricingRaw, &pricing); err == nil {
+						config.Logger.Info("[router] loaded pricing from file",
+							"currency", pricing.Currency,
+							"models_count", len(pricing.Models))
+						for modelKey, modelPrice := range pricing.Models {
+							config.Logger.Info("[router] pricing model",
+								"model", modelKey,
+								"input_price", modelPrice.InputPricePer1M,
+								"output_price", modelPrice.OutputPricePer1M)
+						}
+					} else {
+						config.Logger.Warn("[router] failed to unmarshal pricing", "error", err)
+					}
+				} else {
+					config.Logger.Warn("[router] no pricing field in config")
+				}
+			} else {
+				config.Logger.Warn("[router] failed to parse config JSON", "error", err)
+			}
+		} else {
+			config.Logger.Warn("[router] failed to read config file", "error", err)
+		}
+	} else {
+		config.Logger.Warn("[router] config path is empty")
+	}
+
+	analyticsHandler := &analytics.Handler{
+		ChatHistory: chatHistoryStore,
+		Store:       store,
+	}
+	// Initialize pricing cache
+	analyticsHandler.SetPricing(pricing)
 	webuiHandler := webui.NewHandler()
 
 	r := chi.NewRouter()
@@ -113,7 +184,11 @@ func NewApp() (*App, error) {
 	claude.RegisterRoutes(r, claudeHandler)
 	gemini.RegisterRoutes(r, geminiHandler)
 	r.Route("/admin", func(ar chi.Router) {
-		admin.RegisterRoutes(ar, adminHandler)
+		admin.RegisterRoutes(ar, adminHandler, analyticsHandler)
+		// Register plugin routes
+		if err := pluginManager.RegisterAllRoutes(ar); err != nil {
+			config.Logger.Warn("[plugin] failed to register plugin routes", "error", err)
+		}
 	})
 	webui.RegisterRoutes(r, webuiHandler)
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
@@ -123,7 +198,7 @@ func NewApp() (*App, error) {
 		http.NotFound(w, req)
 	})
 
-	return &App{Store: store, Pool: pool, Resolver: resolver, DS: dsClient, Router: r}, nil
+	return &App{Store: store, Pool: pool, Resolver: resolver, DS: dsClient, Router: r, PluginManager: pluginManager}, nil
 }
 
 func timeout(d time.Duration) func(http.Handler) http.Handler {

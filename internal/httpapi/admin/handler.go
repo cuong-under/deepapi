@@ -4,6 +4,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"ds2api/internal/chathistory"
+	"ds2api/internal/httpapi/admin/analytics"
 	adminaccounts "ds2api/internal/httpapi/admin/accounts"
 	adminauth "ds2api/internal/httpapi/admin/auth"
 	adminconfig "ds2api/internal/httpapi/admin/configmgmt"
@@ -25,7 +26,7 @@ type Handler struct {
 	ChatHistory *chathistory.Store
 }
 
-func RegisterRoutes(r chi.Router, h *Handler) {
+func RegisterRoutes(r chi.Router, h *Handler, analyticsHandler *analytics.Handler) {
 	deps := adminsharedDeps(h)
 	authHandler := &adminauth.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 	accountsHandler := &adminaccounts.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
@@ -51,6 +52,9 @@ func RegisterRoutes(r chi.Router, h *Handler) {
 		admindevcapture.RegisterRoutes(pr, devCaptureHandler)
 		adminhistory.RegisterRoutes(pr, historyHandler)
 		adminversion.RegisterRoutes(pr, versionHandler)
+		if analyticsHandler != nil {
+			analyticsHandler.RegisterRoutes(pr)
+		}
 	})
 }
 

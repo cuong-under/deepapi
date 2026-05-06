@@ -21,6 +21,7 @@ type Config struct {
 	CurrentInputFile  CurrentInputFileConfig  `json:"current_input_file,omitempty"`
 	ThinkingInjection ThinkingInjectionConfig `json:"thinking_injection,omitempty"`
 	Vercel            VercelConfig            `json:"vercel,omitempty"`
+	Pricing           PricingConfig           `json:"pricing,omitempty"`
 	VercelSyncHash    string                  `json:"_vercel_sync_hash,omitempty"`
 	VercelSyncTime    int64                   `json:"_vercel_sync_time,omitempty"`
 	AdditionalFields  map[string]any          `json:"-"`
@@ -197,4 +198,14 @@ func (c *Config) ClearVercelCredentials() {
 		return
 	}
 	c.Vercel = VercelConfig{}
+}
+
+type PricingConfig struct {
+	Currency string                `json:"currency,omitempty"` // USD, VND, etc.
+	Models   map[string]ModelPrice `json:"models,omitempty"`
+}
+
+type ModelPrice struct {
+	InputPricePer1M  float64 `json:"input_price_per_1m"`  // Price per 1M input tokens
+	OutputPricePer1M float64 `json:"output_price_per_1m"` // Price per 1M output tokens
 }

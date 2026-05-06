@@ -15,6 +15,7 @@ export default {
                 primary: {
                     DEFAULT: "var(--color-primary)",
                     foreground: "var(--color-primary-foreground)",
+                    glow: "var(--color-primary-glow)",
                 },
                 secondary: {
                     DEFAULT: "var(--color-secondary)",
@@ -40,11 +41,22 @@ export default {
                     DEFAULT: "var(--color-card)",
                     foreground: "var(--color-card-foreground)",
                 },
+                neon: {
+                    pink: "var(--color-neon-pink)",
+                    purple: "var(--color-neon-purple)",
+                    green: "var(--color-neon-green)",
+                    cyan: "var(--color-primary)",
+                },
+                grid: "var(--color-grid)",
             },
             borderRadius: {
                 lg: "var(--radius)",
                 md: "calc(var(--radius) - 2px)",
                 sm: "calc(var(--radius) - 4px)",
+            },
+            fontFamily: {
+                sans: ['Rajdhani', 'Inter', 'system-ui', 'sans-serif'],
+                mono: ['Fira Code', 'monospace'],
             },
         },
     },

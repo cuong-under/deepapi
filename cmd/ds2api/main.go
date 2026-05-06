@@ -70,6 +70,12 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Shutdown plugins
+	if app.PluginManager != nil {
+		config.Logger.Info("shutting down plugins")
+		// Note: We don't have a ShutdownAll method yet, but plugins will be cleaned up on process exit
+	}
+
 	if err := srv.Shutdown(ctx); err != nil {
 		config.Logger.Error("graceful shutdown failed, forcing exit", "error", err)
 		os.Exit(1)

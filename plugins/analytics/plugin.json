@@ -1,0 +1,14 @@
+{
+  "name": "analytics",
+  "version": "1.0.0",
+  "description": "Token usage analytics dashboard",
+  "author": "cuongunder",
+  "entry_point": "internal",
+  "webui_path": "webui",
+  "permissions": [
+    "read:chat_history",
+    "read:config"
+  ],
+  "dependencies": [],
+  "enabled": true
+}
