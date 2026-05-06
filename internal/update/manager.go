@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"ds2api/internal/config"
@@ -295,10 +297,44 @@ func (m *Manager) ListBackups() ([]string, error) {
 
 // findAssetForPlatform finds appropriate asset for current platform
 func (m *Manager) findAssetForPlatform(assets []Asset) *Asset {
-	// For now, just return first asset
-	// TODO: Implement platform-specific logic
-	if len(assets) > 0 {
-		return &assets[0]
+	// Detect current platform
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	config.Logger.Info("[update] detecting platform", "os", goos, "arch", goarch)
+
+	// Platform-specific patterns
+	var pattern string
+	switch goos {
+	case "windows":
+		pattern = "windows"
+	case "darwin":
+		pattern = "darwin"
+	case "linux":
+		pattern = "linux"
+	default:
+		config.Logger.Warn("[update] unknown platform", "os", goos)
+		return nil
 	}
+
+	// Find matching asset
+	for i := range assets {
+		name := strings.ToLower(assets[i].Name)
+		if strings.Contains(name, pattern) && strings.Contains(name, goarch) {
+			config.Logger.Info("[update] found matching asset", "name", assets[i].Name)
+			return &assets[i]
+		}
+	}
+
+	// Fallback: try without arch check
+	for i := range assets {
+		name := strings.ToLower(assets[i].Name)
+		if strings.Contains(name, pattern) {
+			config.Logger.Info("[update] found platform asset (no arch match)", "name", assets[i].Name)
+			return &assets[i]
+		}
+	}
+
+	config.Logger.Warn("[update] no matching asset found", "platform", goos, "arch", goarch)
 	return nil
 }
