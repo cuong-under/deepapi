@@ -131,7 +131,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
             case 'vercel':
                 return <VercelSyncContainer onMessage={showMessage} authFetch={authFetch} isVercel={isVercel} config={config} />
             case 'update':
-                return <UpdateContainer onMessage={showMessage} authFetch={authFetch} />
+                return <UpdateContainer authFetch={authFetch} />
             case 'settings':
                 return <SettingsContainer onRefresh={fetchConfig} onMessage={showMessage} authFetch={authFetch} onForceLogout={onForceLogout} isVercel={isVercel} />
             default:

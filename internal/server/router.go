@@ -91,8 +91,8 @@ func NewApp() (*App, error) {
 
 	// Initialize update manager
 	updateManager := updatepkg.NewManager(
-		"v1.0.0",                    // Current version - TODO: get from build info
-		"deepseek-ai/deepseek-api", // GitHub repo
+		"v1.0.0",           // Current version - TODO: get from build info
+		"CJackHwang/ds2api", // GitHub repo (correct repo name)
 	)
 
 	modelsHandler := &shared.ModelsHandler{Store: store}

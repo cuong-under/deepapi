@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { RefreshCw, Download, AlertTriangle, CheckCircle, Clock, Package, ArrowLeft } from 'lucide-react';
 import { useI18n } from '../../i18n';
 
-export default function UpdateContainer() {
+export default function UpdateContainer({ authFetch }) {
   const { t } = useI18n();
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -31,9 +31,7 @@ export default function UpdateContainer() {
     setIsChecking(true);
     setError(null);
     try {
-      const res = await fetch('/admin/update/check', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('adminToken')}` }
-      });
+      const res = await authFetch('/admin/update/check');
       if (!res.ok) throw new Error('Failed to check for updates');
       const data = await res.json();
       setUpdateInfo(data);
@@ -50,9 +48,8 @@ export default function UpdateContainer() {
     setIsUpdating(true);
     setError(null);
     try {
-      const res = await fetch('/admin/update/install', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('adminToken')}` }
+      const res = await authFetch('/admin/update/install', {
+        method: 'POST'
       });
       if (!res.ok) throw new Error('Failed to start update');
       // Status will be polled automatically
@@ -64,9 +61,7 @@ export default function UpdateContainer() {
 
   const fetchUpdateStatus = async () => {
     try {
-      const res = await fetch('/admin/update/status', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('adminToken')}` }
-      });
+      const res = await authFetch('/admin/update/status');
       if (!res.ok) throw new Error('Failed to fetch status');
       const data = await res.json();
       setUpdateStatus(data);
@@ -81,9 +76,7 @@ export default function UpdateContainer() {
 
   const loadBackups = async () => {
     try {
-      const res = await fetch('/admin/update/backups', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('adminToken')}` }
-      });
+      const res = await authFetch('/admin/update/backups');
       if (!res.ok) throw new Error('Failed to load backups');
       const data = await res.json();
       setBackups(data.backups || []);
@@ -96,10 +89,9 @@ export default function UpdateContainer() {
     if (!confirm(t('update.confirm_rollback'))) return;
 
     try {
-      const res = await fetch('/admin/update/rollback', {
+      const res = await authFetch('/admin/update/rollback', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ backup_name: backupName })
