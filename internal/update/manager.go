@@ -170,8 +170,8 @@ func (m *Manager) BackupCurrent(ctx context.Context) (string, error) {
 }
 
 // InstallUpdate installs downloaded update
-func (m *Manager) InstallUpdate(ctx context.Context, archivePath string) error {
-	config.Logger.Info("[update] installing update", "archive", archivePath)
+func (m *Manager) InstallUpdate(ctx context.Context, archivePath string, newVersion string) error {
+	config.Logger.Info("[update] installing update", "archive", archivePath, "new_version", newVersion)
 
 	// Extract archive to temp directory
 	tempDir := filepath.Join(m.dataDir, "temp-update")
@@ -227,10 +227,14 @@ func (m *Manager) InstallUpdate(ctx context.Context, archivePath string) error {
 	// Remove old binary
 	os.Remove(oldBinaryPath)
 
-	// Update version file
+	// Update version file with new version
 	versionFile := filepath.Join(filepath.Dir(exePath), "VERSION")
-	if err := os.WriteFile(versionFile, []byte(m.currentVersion), 0644); err != nil {
+	if err := os.WriteFile(versionFile, []byte(newVersion), 0644); err != nil {
 		config.Logger.Warn("[update] failed to write version file", "error", err)
+	} else {
+		config.Logger.Info("[update] updated version file", "new_version", newVersion)
+		// Update manager's current version
+		m.SetCurrentVersion(newVersion)
 	}
 
 	// Cleanup temp directory

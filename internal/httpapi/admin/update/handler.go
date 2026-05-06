@@ -124,7 +124,7 @@ func (h *Handler) performUpdate(ctx context.Context) {
 	h.updateStatus("installing", 60, "Installing update...")
 
 	// Step 4: Install update
-	if err := h.UpdateManager.InstallUpdate(ctx, archivePath); err != nil {
+	if err := h.UpdateManager.InstallUpdate(ctx, archivePath, release.TagName); err != nil {
 		h.updateStatus("failed", 60, "Failed to install update", err.Error())
 		// Attempt rollback
 		config.Logger.Warn("[update] installation failed, attempting rollback")
