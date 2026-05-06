@@ -1,0 +1,97 @@
+# Git Merge Strategies for DS2API Customizations
+# This file tells Git how to handle conflicts when merging upstream updates
+
+# ============================================================================
+# PRESERVE CUSTOMIZATIONS (merge=ours)
+# These files contain customizations that should NEVER be overwritten
+# ============================================================================
+
+# Configuration files - Keep our custom config
+config.json merge=ours
+
+# Vietnamese translations - Keep our translations
+webui/src/locales/vi.json merge=ours
+
+# Cyberpunk theme - Keep our custom theme
+webui/src/styles.css merge=ours
+webui/tailwind.config.js merge=ours
+webui/index.html merge=ours
+
+# Custom assets - Keep our logo/favicon
+webui/public/ds2api-favicon.svg merge=ours
+
+# Custom branding - Keep our Vibecode branding
+webui/src/layout/DashboardShell.jsx merge=ours
+
+# Language settings - Keep Vietnamese as default
+webui/src/i18n.jsx merge=ours
+webui/src/components/LanguageToggle.jsx merge=ours
+
+# ============================================================================
+# MANUAL MERGE (merge=manual)
+# These files need careful review when merging
+# ============================================================================
+
+# Core integration points - Review changes carefully
+internal/server/router.go merge=manual
+internal/config/config.go merge=manual
+internal/httpapi/admin/handler.go merge=manual
+cmd/ds2api/main.go merge=manual
+
+# ============================================================================
+# NO CONFLICT (auto-merge or keep ours)
+# These are new files/directories that won't conflict with upstream
+# ============================================================================
+
+# Plugin system - New infrastructure, keep ours
+internal/plugin/* merge=ours
+plugins/* merge=ours
+
+# Analytics feature - New feature, keep ours
+internal/httpapi/admin/analytics/* merge=ours
+webui/src/features/analytics/* merge=ours
+
+# Documentation - Keep our docs
+CUSTOMIZATIONS_AUDIT.md merge=ours
+docs/UPDATE_PROCEDURE.md merge=ours
+
+# Test files - Keep ours
+test_*.go merge=ours
+test_*.sh merge=ours
+debug_*.js merge=ours
+
+# Build artifacts - Ignore
+*.exe binary
+*.so binary
+data/* binary
+
+# ============================================================================
+# LINE ENDING NORMALIZATION
+# ============================================================================
+
+# Text files should use LF (Unix-style) line endings
+* text=auto
+
+# Explicitly declare text files
+*.go text
+*.js text
+*.jsx text
+*.json text
+*.md text
+*.css text
+*.html text
+*.sh text eol=lf
+
+# Binary files
+*.exe binary
+*.so binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
