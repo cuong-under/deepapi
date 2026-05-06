@@ -22,6 +22,7 @@ import (
 	dsclient "ds2api/internal/deepseek/client"
 	"ds2api/internal/httpapi/admin"
 	"ds2api/internal/httpapi/admin/analytics"
+	"ds2api/internal/httpapi/admin/update"
 	"ds2api/internal/httpapi/claude"
 	"ds2api/internal/httpapi/gemini"
 	"ds2api/internal/httpapi/openai/chat"
@@ -31,6 +32,7 @@ import (
 	"ds2api/internal/httpapi/openai/shared"
 	"ds2api/internal/httpapi/requestbody"
 	"ds2api/internal/plugin"
+	updatepkg "ds2api/internal/update"
 	"ds2api/internal/webui"
 
 	// Import plugins to trigger init() registration
@@ -45,6 +47,7 @@ type App struct {
 	DS            *dsclient.Client
 	Router        http.Handler
 	PluginManager *plugin.Manager
+	UpdateManager *updatepkg.Manager
 }
 
 func NewApp() (*App, error) {
@@ -85,6 +88,12 @@ func NewApp() (*App, error) {
 			config.Logger.Warn("[plugin] failed to load plugins", "error", err)
 		}
 	}
+
+	// Initialize update manager
+	updateManager := updatepkg.NewManager(
+		"v1.0.0",                    // Current version - TODO: get from build info
+		"deepseek-ai/deepseek-api", // GitHub repo
+	)
 
 	modelsHandler := &shared.ModelsHandler{Store: store}
 	chatHandler := &chat.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
@@ -139,6 +148,9 @@ func NewApp() (*App, error) {
 	}
 	// Initialize pricing cache
 	analyticsHandler.SetPricing(pricing)
+
+	updateHandler := update.NewHandler(updateManager)
+
 	webuiHandler := webui.NewHandler()
 
 	r := chi.NewRouter()
@@ -185,6 +197,8 @@ func NewApp() (*App, error) {
 	gemini.RegisterRoutes(r, geminiHandler)
 	r.Route("/admin", func(ar chi.Router) {
 		admin.RegisterRoutes(ar, adminHandler, analyticsHandler)
+		// Register update routes
+		update.RegisterRoutes(ar, updateHandler)
 		// Register plugin routes
 		if err := pluginManager.RegisterAllRoutes(ar); err != nil {
 			config.Logger.Warn("[plugin] failed to register plugin routes", "error", err)
@@ -198,7 +212,15 @@ func NewApp() (*App, error) {
 		http.NotFound(w, req)
 	})
 
-	return &App{Store: store, Pool: pool, Resolver: resolver, DS: dsClient, Router: r, PluginManager: pluginManager}, nil
+	return &App{
+		Store:         store,
+		Pool:          pool,
+		Resolver:      resolver,
+		DS:            dsClient,
+		Router:        r,
+		PluginManager: pluginManager,
+		UpdateManager: updateManager,
+	}, nil
 }
 
 func timeout(d time.Duration) func(http.Handler) http.Handler {

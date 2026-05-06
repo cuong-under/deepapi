@@ -37,6 +37,10 @@
         "analytics": {
             "label": "Thống kê Token",
             "desc": "Xem thống kê sử dụng token và chi phí"
+        },
+        "update": {
+            "label": "Cập nhật hệ thống",
+            "desc": "Kiểm tra và cài đặt bản cập nhật mới"
         }
     },
     "sidebar": {
@@ -526,5 +530,30 @@
         "tokens": "Tokens",
         "cost": "Chi phí",
         "compareYesterday": "So với hôm qua"
+    },
+    "update": {
+        "title": "Cập nhật hệ thống",
+        "subtitle": "Quản lý phiên bản và cập nhật DS2API",
+        "check_updates": "Kiểm tra cập nhật",
+        "checking": "Đang kiểm tra...",
+        "error": "Lỗi",
+        "new_version_available": "Có phiên bản mới",
+        "current_version": "Phiên bản hiện tại",
+        "latest_version": "Phiên bản mới nhất",
+        "published": "Ngày phát hành",
+        "release_notes": "Ghi chú phát hành",
+        "install_now": "Cài đặt ngay",
+        "up_to_date": "Đã cập nhật",
+        "updating": "Đang cập nhật",
+        "backups": "Bản sao lưu",
+        "no_backups": "Chưa có bản sao lưu nào",
+        "rollback": "Khôi phục",
+        "confirm_install": "Bạn có chắc muốn cài đặt bản cập nhật này? Hệ thống sẽ tự động tạo bản sao lưu trước khi cập nhật.",
+        "confirm_rollback": "Bạn có chắc muốn khôi phục về phiên bản này? Hệ thống sẽ khởi động lại sau khi khôi phục.",
+        "rollback_success": "Khôi phục thành công! Hệ thống sẽ khởi động lại...",
+        "warning_title": "Lưu ý quan trọng",
+        "warning_1": "Quá trình cập nhật sẽ tự động tạo bản sao lưu",
+        "warning_2": "Hệ thống sẽ khởi động lại sau khi cập nhật hoàn tất",
+        "warning_3": "Các plugin tùy chỉnh sẽ được giữ nguyên"
     }
 }

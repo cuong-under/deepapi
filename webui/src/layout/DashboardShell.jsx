@@ -13,7 +13,8 @@ import {
     Globe,
     History,
     Loader2,
-    BarChart3
+    BarChart3,
+    RefreshCw
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -29,6 +30,7 @@ const VercelSyncContainer = lazy(() => import('../features/vercel/VercelSyncCont
 const SettingsContainer = lazy(() => import('../features/settings/SettingsContainer'))
 const ProxyManagerContainer = lazy(() => import('../features/proxy/ProxyManagerContainer'))
 const AnalyticsContainer = lazy(() => import('../features/analytics/AnalyticsContainer'))
+const UpdateContainer = lazy(() => import('../features/update/UpdateContainer'))
 
 function TabLoadingFallback({ label }) {
     return (
@@ -55,6 +57,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
         { id: 'history', label: t('nav.history.label'), icon: History, description: t('nav.history.desc') },
         { id: 'import', label: t('nav.import.label'), icon: Upload, description: t('nav.import.desc') },
         // { id: 'vercel', label: t('nav.vercel.label'), icon: Cloud, description: t('nav.vercel.desc') },
+        { id: 'update', label: t('nav.update.label'), icon: RefreshCw, description: t('nav.update.desc') },
         { id: 'settings', label: t('nav.settings.label'), icon: SettingsIcon, description: t('nav.settings.desc') },
     ]
 
@@ -127,6 +130,8 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                 return <BatchImport onRefresh={fetchConfig} onMessage={showMessage} authFetch={authFetch} />
             case 'vercel':
                 return <VercelSyncContainer onMessage={showMessage} authFetch={authFetch} isVercel={isVercel} config={config} />
+            case 'update':
+                return <UpdateContainer onMessage={showMessage} authFetch={authFetch} />
             case 'settings':
                 return <SettingsContainer onRefresh={fetchConfig} onMessage={showMessage} authFetch={authFetch} onForceLogout={onForceLogout} isVercel={isVercel} />
             default:
