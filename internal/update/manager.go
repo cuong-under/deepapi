@@ -212,17 +212,29 @@ func (m *Manager) InstallUpdate(ctx context.Context, archivePath string, newVers
 	}
 
 	// On Windows, we need to rename old binary first
+	// But if binary is running, this will fail
 	oldBinaryPath := exePath + ".old"
+
+	config.Logger.Info("[update] attempting to rename current binary", "from", exePath, "to", oldBinaryPath)
+
 	if err := os.Rename(exePath, oldBinaryPath); err != nil {
-		return fmt.Errorf("rename old binary: %w", err)
+		config.Logger.Error("[update] failed to rename binary - binary may be in use", "error", err)
+		return fmt.Errorf("rename old binary (binary may be running): %w", err)
 	}
 
+	config.Logger.Info("[update] successfully renamed old binary")
+
 	// Copy new binary
+	config.Logger.Info("[update] copying new binary", "from", newBinaryPath, "to", exePath)
+
 	if err := m.copyFile(newBinaryPath, exePath); err != nil {
 		// Rollback
+		config.Logger.Error("[update] failed to copy new binary, rolling back", "error", err)
 		os.Rename(oldBinaryPath, exePath)
 		return fmt.Errorf("copy new binary: %w", err)
 	}
+
+	config.Logger.Info("[update] successfully copied new binary")
 
 	// Remove old binary
 	os.Remove(oldBinaryPath)
