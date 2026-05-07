@@ -322,6 +322,62 @@ go run ./cmd/ds2api
 
 > **WebUI 自动构建**：本地首次启动时，若 `static/admin` 不存在，会自动尝试执行 `npm ci`（仅在缺少依赖时）和 `npm run build -- --outDir static/admin --emptyOutDir`（需要本机有 Node.js 和 npm）。你也可以手动构建：`./scripts/build-webui.sh`
 
+### 方式五：VPS 部署（推荐用于生产环境）
+
+**适用场景**：需要公网访问、稳定运行、使用 Cloudflare Tunnel 保护服务
+
+**一键部署脚本**：
+
+```bash
+# 下载并运行自动部署脚本（需要 root 权限）
+wget https://raw.githubusercontent.com/CJackHwang/ds2api/custom-vibecode/deploy.sh
+sudo bash deploy.sh
+```
+
+部署脚本会自动完成：
+
+- 安装依赖（Git、Go、Node.js）
+- 克隆仓库并构建应用
+- 配置 systemd 服务（开机自启）
+- 可选安装 Cloudflare Tunnel
+
+**手动部署步骤**：
+
+详细的手动部署指南请参阅 [DEPLOY_VPS.md](DEPLOY_VPS.md)（中文详细教程）或 [DEPLOY.md](DEPLOY.md)，包含：
+
+- VPS 环境准备
+- Git 分支管理（保留自定义功能）
+- Systemd 服务配置
+- Cloudflare Tunnel 设置
+- 故障排查与安全加固
+
+**服务管理命令**：
+
+```bash
+# 查看服务状态
+sudo systemctl status ds2api
+
+# 查看实时日志
+sudo journalctl -u ds2api -f
+
+# 重启服务
+sudo systemctl restart ds2api
+
+# 停止服务
+sudo systemctl stop ds2api
+```
+
+**通过 Admin UI 更新系统**：
+
+部署完成后，访问 `https://yourdomain.com/admin`（或 `http://localhost:5001/admin`），在"系统更新"页面可以：
+
+- 一键检查上游更新
+- 自动合并更新并保留自定义功能
+- 自动备份与回滚
+- 查看更新历史
+
+> **注意**：VPS 部署使用 Git-based 更新系统，会自动保留你的自定义功能（如 Analytics Dashboard、自定义主题等），同时合并上游的新功能和修复。
+
 ## 配置说明
 
 `README` 只保留快速入口，完整字段请以 [config.example.json](config.example.json) 为模板，并参考 [部署指南](docs/DEPLOY.md#0-前置要求) 与 [API 配置最佳实践](API.md#配置最佳实践)。
@@ -354,7 +410,7 @@ Gemini 路由还可以使用 `x-goog-api-key`，或在没有认证头时使用 `
 
 ## 并发模型
 
-```
+```text
 每账号可用并发 = DS2API_ACCOUNT_MAX_INFLIGHT（默认 2）
 建议并发值 = 账号数量 × 每账号并发上限
 等待队列上限 = DS2API_ACCOUNT_MAX_QUEUE（默认 = 建议并发值）

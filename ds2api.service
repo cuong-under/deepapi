@@ -1,0 +1,39 @@
+[Unit]
+Description=DS2API - DeepSeek API Gateway
+Documentation=https://github.com/CJackHwang/ds2api
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/ds2api
+
+# Environment variables
+Environment="DS2API_ADMIN_KEY=CHANGE_THIS_PASSWORD"
+Environment="PATH=/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Start command
+ExecStart=/root/ds2api/ds2api
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitInterval=0
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ds2api
+
+# Security hardening (optional)
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits (optional)
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
