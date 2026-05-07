@@ -47,7 +47,7 @@ type App struct {
 	DS            *dsclient.Client
 	Router        http.Handler
 	PluginManager *plugin.Manager
-	UpdateManager *updatepkg.Manager
+	GitManager    *updatepkg.GitManager
 }
 
 func NewApp() (*App, error) {
@@ -89,12 +89,17 @@ func NewApp() (*App, error) {
 		}
 	}
 
-	// Initialize update manager
-	currentVersion := readVersion()
-	updateManager := updatepkg.NewManager(
-		currentVersion,
-		"CJackHwang/ds2api", // GitHub repo (correct repo name)
-	)
+	// Initialize Git update manager
+	repoDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("get working directory: %w", err)
+	}
+
+	gitManager, err := updatepkg.NewGitManager(repoDir)
+	if err != nil {
+		config.Logger.Warn("[git-update] failed to initialize git manager", "error", err)
+		gitManager = nil
+	}
 
 	modelsHandler := &shared.ModelsHandler{Store: store}
 	chatHandler := &chat.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
@@ -150,7 +155,10 @@ func NewApp() (*App, error) {
 	// Initialize pricing cache
 	analyticsHandler.SetPricing(pricing)
 
-	updateHandler := update.NewHandler(updateManager)
+	var updateHandler *update.GitHandler
+	if gitManager != nil {
+		updateHandler = update.NewGitHandler(gitManager)
+	}
 
 	webuiHandler := webui.NewHandler()
 
@@ -220,7 +228,7 @@ func NewApp() (*App, error) {
 		DS:            dsClient,
 		Router:        r,
 		PluginManager: pluginManager,
-		UpdateManager: updateManager,
+		GitManager:    gitManager,
 	}, nil
 }
 

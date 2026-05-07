@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { RefreshCw, Download, AlertTriangle, CheckCircle, Clock, Package, ArrowLeft } from 'lucide-react';
 import { useI18n } from '../../i18n';
 
-export default function UpdateContainer({ authFetch }) {
+export default function UpdateContainer({ authFetch, onUpdateComplete }) {
   const { t } = useI18n();
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -68,6 +68,14 @@ export default function UpdateContainer({ authFetch }) {
 
       if (data.stage === 'complete' || data.stage === 'failed') {
         setIsUpdating(false);
+        // Reload version info when update completes successfully
+        if (data.stage === 'complete' && onUpdateComplete) {
+          onUpdateComplete();
+          // Also refresh update info to show new status
+          setTimeout(() => {
+            checkForUpdates();
+          }, 1000);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch update status:', err);
@@ -150,24 +158,26 @@ export default function UpdateContainer({ authFetch }) {
 
               <div className="space-y-2 mb-4">
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-cyan-400/60">{t('update.current_version')}:</span>
-                  <span className="text-cyan-400 font-mono">{updateInfo.current_version}</span>
+                  <span className="text-cyan-400/60">{t('update.current_commit')}:</span>
+                  <span className="text-cyan-400 font-mono">{updateInfo.current_commit}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-cyan-400/60">{t('update.latest_version')}:</span>
-                  <span className="text-cyan-400 font-mono font-bold">{updateInfo.latest_version}</span>
+                  <span className="text-cyan-400/60">{t('update.latest_commit')}:</span>
+                  <span className="text-cyan-400 font-mono font-bold">{updateInfo.latest_commit}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-cyan-400/60">{t('update.published')}:</span>
-                  <span className="text-cyan-400">{new Date(updateInfo.published_at).toLocaleDateString('vi-VN')}</span>
+                  <span className="text-cyan-400/60">{t('update.commits_behind')}:</span>
+                  <span className="text-cyan-400">{updateInfo.commits_behind} commits</span>
                 </div>
               </div>
 
-              {updateInfo.release_notes && (
+              {updateInfo.commit_messages && updateInfo.commit_messages.length > 0 && (
                 <div className="bg-black/30 rounded p-3 mb-4">
-                  <p className="text-xs text-cyan-400/60 mb-2">{t('update.release_notes')}:</p>
-                  <div className="text-sm text-cyan-400/80 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                    {updateInfo.release_notes}
+                  <p className="text-xs text-cyan-400/60 mb-2">{t('update.new_commits')}:</p>
+                  <div className="text-sm text-cyan-400/80 space-y-1 max-h-40 overflow-y-auto">
+                    {updateInfo.commit_messages.map((msg, idx) => (
+                      <div key={idx} className="font-mono text-xs">{msg}</div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -193,7 +203,7 @@ export default function UpdateContainer({ authFetch }) {
             <div>
               <h2 className="text-lg font-bold text-green-400">{t('update.up_to_date')}</h2>
               <p className="text-sm text-green-400/60">
-                {t('update.current_version')}: {updateInfo.current_version}
+                {t('update.current_commit')}: {updateInfo.current_commit}
               </p>
             </div>
           </div>
@@ -231,28 +241,28 @@ export default function UpdateContainer({ authFetch }) {
                     <span className="text-cyan-400">{t('update.stage_checking')}</span>
                   </>
                 )}
-                {updateStatus.stage === 'downloading' && (
-                  <>
-                    <Download className="w-4 h-4 text-cyan-400 animate-pulse" />
-                    <span className="text-cyan-400">{t('update.stage_downloading')}</span>
-                  </>
-                )}
                 {updateStatus.stage === 'backing_up' && (
                   <>
                     <Package className="w-4 h-4 text-cyan-400 animate-pulse" />
                     <span className="text-cyan-400">{t('update.stage_backing_up')}</span>
                   </>
                 )}
-                {updateStatus.stage === 'installing' && (
+                {updateStatus.stage === 'merging' && (
                   <>
                     <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />
-                    <span className="text-cyan-400">{t('update.stage_installing')}</span>
+                    <span className="text-cyan-400">{t('update.stage_merging')}</span>
                   </>
                 )}
-                {updateStatus.stage === 'verifying' && (
+                {updateStatus.stage === 'building' && (
+                  <>
+                    <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />
+                    <span className="text-cyan-400">{t('update.stage_building')}</span>
+                  </>
+                )}
+                {updateStatus.stage === 'updating_version' && (
                   <>
                     <CheckCircle className="w-4 h-4 text-cyan-400 animate-pulse" />
-                    <span className="text-cyan-400">{t('update.stage_verifying')}</span>
+                    <span className="text-cyan-400">{t('update.stage_updating_version')}</span>
                   </>
                 )}
                 {updateStatus.stage === 'complete' && (

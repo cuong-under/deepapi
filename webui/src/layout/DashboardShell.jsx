@@ -94,26 +94,19 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
 
     const [versionInfo, setVersionInfo] = useState(null)
 
-    useEffect(() => {
-        let disposed = false
-        async function loadVersion() {
-            try {
-                const res = await authFetch('/admin/version')
-                const data = await res.json()
-                if (!disposed) {
-                    setVersionInfo(data)
-                }
-            } catch (_err) {
-                if (!disposed) {
-                    setVersionInfo(null)
-                }
-            }
-        }
-        loadVersion()
-        return () => {
-            disposed = true
+    const loadVersion = useCallback(async () => {
+        try {
+            const res = await authFetch('/admin/version')
+            const data = await res.json()
+            setVersionInfo(data)
+        } catch (_err) {
+            setVersionInfo(null)
         }
     }, [authFetch])
+
+    useEffect(() => {
+        loadVersion()
+    }, [loadVersion])
     const renderTab = () => {
         switch (activeTab) {
             case 'accounts':
@@ -131,7 +124,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
             case 'vercel':
                 return <VercelSyncContainer onMessage={showMessage} authFetch={authFetch} isVercel={isVercel} config={config} />
             case 'update':
-                return <UpdateContainer authFetch={authFetch} />
+                return <UpdateContainer authFetch={authFetch} onUpdateComplete={loadVersion} />
             case 'settings':
                 return <SettingsContainer onRefresh={fetchConfig} onMessage={showMessage} authFetch={authFetch} onForceLogout={onForceLogout} isVercel={isVercel} />
             default:

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ds2api/internal/config"
+	"ds2api/internal/version"
 )
 
 // Manager quản lý update process
@@ -205,12 +206,66 @@ func (m *Manager) InstallUpdate(ctx context.Context, archivePath string, newVers
 
 	config.Logger.Info("[update] found binary", "path", newBinaryPath)
 
-	// Replace current binary (atomic operation)
+	// Get current executable path
 	exePath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("get executable path: %w", err)
 	}
 
+	// Resolve symlinks
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		config.Logger.Warn("[update] failed to resolve symlinks", "error", err)
+	}
+
+	config.Logger.Info("[update] executable path", "path", exePath)
+
+	// Determine VERSION file location
+	// If running with "go run", use working directory instead of temp go-build dir
+	versionDir := filepath.Dir(exePath)
+	if strings.Contains(exePath, "go-build") {
+		// Running with "go run" - use working directory
+		if wd, err := os.Getwd(); err == nil {
+			versionDir = wd
+			config.Logger.Info("[update] detected go run mode, using working directory", "dir", versionDir)
+		}
+	}
+
+	config.Logger.Info("[update] version directory", "dir", versionDir)
+
+	// Update VERSION file BEFORE replacing binary
+	versionFile := filepath.Join(versionDir, "VERSION")
+	config.Logger.Info("[update] writing VERSION file", "path", versionFile, "version", newVersion)
+
+	// Check if directory is writable
+	testFile := filepath.Join(versionDir, ".test_write")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		config.Logger.Error("[update] directory not writable", "error", err, "dir", versionDir)
+		return fmt.Errorf("directory not writable: %w", err)
+	}
+	os.Remove(testFile)
+
+	if err := os.WriteFile(versionFile, []byte(newVersion), 0644); err != nil {
+		config.Logger.Error("[update] failed to write version file", "error", err, "path", versionFile)
+		return fmt.Errorf("write version file: %w", err)
+	}
+
+	config.Logger.Info("[update] updated version file", "new_version", newVersion, "path", versionFile)
+
+	// Verify file was written
+	if content, err := os.ReadFile(versionFile); err != nil {
+		config.Logger.Error("[update] failed to verify version file", "error", err)
+	} else {
+		config.Logger.Info("[update] verified version file content", "content", string(content))
+	}
+
+	// Update manager's current version
+	m.SetCurrentVersion(newVersion)
+	// Reload version package cache
+	version.Reload()
+	config.Logger.Info("[update] reloaded version cache")
+
+	// Replace current binary (atomic operation)
 	// On Windows, we need to rename old binary first
 	// But if binary is running, this will fail
 	oldBinaryPath := exePath + ".old"
@@ -238,16 +293,6 @@ func (m *Manager) InstallUpdate(ctx context.Context, archivePath string, newVers
 
 	// Remove old binary
 	os.Remove(oldBinaryPath)
-
-	// Update version file with new version
-	versionFile := filepath.Join(filepath.Dir(exePath), "VERSION")
-	if err := os.WriteFile(versionFile, []byte(newVersion), 0644); err != nil {
-		config.Logger.Warn("[update] failed to write version file", "error", err)
-	} else {
-		config.Logger.Info("[update] updated version file", "new_version", newVersion)
-		// Update manager's current version
-		m.SetCurrentVersion(newVersion)
-	}
 
 	// Cleanup temp directory
 	os.RemoveAll(tempDir)

@@ -17,30 +17,60 @@ var (
 	currentOnce sync.Once
 	currentVal  string
 	sourceVal   string
+	mu          sync.RWMutex
 )
 
 func Current() (value string, source string) {
-	currentOnce.Do(func() {
-		if build := strings.TrimSpace(BuildVersion); build != "" {
-			currentVal = normalize(build)
-			sourceVal = "build-ldflags"
-			return
-		}
-		if fv := readVersionFile(); fv != "" {
-			currentVal = normalize(fv)
-			sourceVal = "file:VERSION"
-			return
-		}
+	mu.RLock()
+	if currentVal != "" {
+		defer mu.RUnlock()
+		return currentVal, sourceVal
+	}
+	mu.RUnlock()
 
-		if vv := versionFromVercelEnv(); vv != "" {
-			currentVal = vv
-			sourceVal = "env:vercel"
-			return
-		}
-		currentVal = "dev"
-		sourceVal = "default"
-	})
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if currentVal != "" {
+		return currentVal, sourceVal
+	}
+
+	if build := strings.TrimSpace(BuildVersion); build != "" {
+		currentVal = normalize(build)
+		sourceVal = "build-ldflags"
+		return currentVal, sourceVal
+	}
+	if fv := readVersionFile(); fv != "" {
+		currentVal = normalize(fv)
+		sourceVal = "file:VERSION"
+		return currentVal, sourceVal
+	}
+
+	if vv := versionFromVercelEnv(); vv != "" {
+		currentVal = vv
+		sourceVal = "env:vercel"
+		return currentVal, sourceVal
+	}
+	currentVal = "dev"
+	sourceVal = "default"
 	return currentVal, sourceVal
+}
+
+// Reload forces re-reading the version from file
+// Call this after updating the VERSION file
+func Reload() {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if fv := readVersionFile(); fv != "" {
+		currentVal = normalize(fv)
+		sourceVal = "file:VERSION"
+		// Log for debugging
+		println("[version] Reloaded version:", currentVal, "from", sourceVal)
+	} else {
+		println("[version] Reload failed: VERSION file not found or empty")
+	}
 }
 
 func readVersionFile() string {
