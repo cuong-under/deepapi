@@ -35,6 +35,17 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
     return authFetch(`/admin/update${path}`, options);
   };
 
+  const responseError = async (res, fallback) => {
+    const text = await res.text().catch(() => '');
+    if (!text) return fallback;
+    try {
+      const data = JSON.parse(text);
+      return data.error || data.detail || data.message || text;
+    } catch {
+      return text;
+    }
+  };
+
   const checkForUpdates = async () => {
     setIsChecking(true);
     setError(null);
@@ -55,14 +66,25 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
 
     setIsUpdating(true);
     setError(null);
+    setUpdateStatus({
+      stage: 'starting',
+      progress: 0,
+      message: 'Đang khởi động cập nhật...',
+    });
     try {
       const res = await updateFetch('/install', {
         method: 'POST'
       });
-      if (!res.ok) throw new Error('Failed to start update');
-      // Status will be polled automatically
+      if (!res.ok) throw new Error(await responseError(res, 'Failed to start update'));
+      await fetchUpdateStatus();
     } catch (err) {
       setError(err.message);
+      setUpdateStatus({
+        stage: 'failed',
+        progress: 0,
+        message: 'Không thể bắt đầu cập nhật',
+        error: err.message,
+      });
       setIsUpdating(false);
     }
   };
@@ -247,6 +269,12 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
                   <>
                     <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />
                     <span className="text-cyan-400">{t('update.stage_checking')}</span>
+                  </>
+                )}
+                {updateStatus.stage === 'starting' && (
+                  <>
+                    <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />
+                    <span className="text-cyan-400">Đang khởi động cập nhật...</span>
                   </>
                 )}
                 {updateStatus.stage === 'backing_up' && (
