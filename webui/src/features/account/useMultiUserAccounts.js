@@ -21,17 +21,24 @@ export function useMultiUserAccounts(authFetch) {
         }
     }, [])
 
-    const fetchAccounts = async () => {
+    const fetchAccounts = async ({ page = 1, pageSize = 10, query = '' } = {}) => {
         if (isMultiUser === null) return { accounts: [], total: 0 }
 
         if (isMultiUser) {
-            // Multi-user mode: fetch from /api/user/accounts
-            const res = await authFetch('/api/user/accounts')
+            const params = new URLSearchParams({
+                page: String(page),
+                page_size: String(pageSize),
+            })
+            if (query.trim()) params.set('q', query.trim())
+            const res = await authFetch(`/api/user/accounts?${params.toString()}`)
             if (!res.ok) throw new Error('Failed to fetch accounts')
             const data = await res.json()
             return {
                 accounts: data.accounts || [],
-                total: data.total || 0
+                total: data.total || 0,
+                page: data.page || page,
+                page_size: data.page_size || pageSize,
+                total_pages: data.total_pages || 1,
             }
         } else {
             // Legacy mode: fetch from /admin/accounts

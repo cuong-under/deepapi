@@ -12,6 +12,12 @@ export async function fetchSettings(apiFetch, t) {
     return { res, data }
 }
 
+export async function fetchUserSettings(apiFetch, t) {
+    const res = await apiFetch('/api/user/profile/settings')
+    const data = await parseJSONResponse(res, t)
+    return { res, data }
+}
+
 export async function putSettings(apiFetch, payload) {
     const res = await apiFetch('/admin/settings', {
         method: 'PUT',

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -92,7 +93,17 @@ func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accounts, err := h.db.GetAccountsByUserID(userID)
+	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
+	pageSize := parsePositiveInt(r.URL.Query().Get("page_size"), 10)
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	accounts, total, err := h.db.ListAccountsByUserID(userID, database.UserAccountListOptions{
+		Limit:  pageSize,
+		Offset: (page - 1) * pageSize,
+		Search: r.URL.Query().Get("q"),
+	})
 	if err != nil {
 		http.Error(w, `{"error":"failed to get accounts"}`, http.StatusInternalServerError)
 		return
@@ -100,8 +111,11 @@ func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"accounts": accountResponses(accounts),
-		"total":    len(accounts),
+		"accounts":    accountResponses(accounts),
+		"total":       total,
+		"page":        page,
+		"page_size":   pageSize,
+		"total_pages": max(1, (total+pageSize-1)/pageSize),
 	})
 }
 
@@ -149,6 +163,11 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
+	req.Email = strings.TrimSpace(req.Email)
+	req.Mobile = strings.TrimSpace(req.Mobile)
+	req.Name = strings.TrimSpace(req.Name)
+	req.Remark = strings.TrimSpace(req.Remark)
+	req.ProxyID = strings.TrimSpace(req.ProxyID)
 
 	// Validate: must have email or mobile
 	if req.Email == "" && req.Mobile == "" {
@@ -187,6 +206,11 @@ func (h *Handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
+	req.Email = strings.TrimSpace(req.Email)
+	req.Mobile = strings.TrimSpace(req.Mobile)
+	req.Name = strings.TrimSpace(req.Name)
+	req.Remark = strings.TrimSpace(req.Remark)
+	req.ProxyID = strings.TrimSpace(req.ProxyID)
 
 	existing, err := h.db.GetAccountByID(accountID)
 	if err != nil {
@@ -215,6 +239,21 @@ func (h *Handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"message":"account updated successfully"}`))
+}
+
+func parsePositiveInt(raw string, fallback int) int {
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // DeleteAccount deletes an account

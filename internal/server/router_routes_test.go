@@ -72,6 +72,7 @@ func TestAPIRoutesRemainRegistered(t *testing.T) {
 		"DELETE /admin/keys/{key}",
 		"GET /admin/proxies",
 		"POST /admin/proxies",
+		"POST /admin/proxies/import",
 		"PUT /admin/proxies/{proxyID}",
 		"DELETE /admin/proxies/{proxyID}",
 		"POST /admin/proxies/test",
@@ -145,6 +146,12 @@ func TestMultiUserAdminUpdateRoutesRemainRegistered(t *testing.T) {
 	}
 
 	for _, want := range []string{
+		"GET /api/user/proxies",
+		"POST /api/user/proxies",
+		"POST /api/user/proxies/import",
+		"PUT /api/user/proxies/{proxyID}",
+		"DELETE /api/user/proxies/{proxyID}",
+		"POST /api/user/proxies/test",
 		"GET /api/admin/update/check",
 		"POST /api/admin/update/install",
 		"GET /api/admin/update/status",

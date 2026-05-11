@@ -1,4 +1,4 @@
-export default function CurrentInputFileSection({ t, form, setForm }) {
+export default function CurrentInputFileSection({ t, form, setForm, disabled = false }) {
     return (
         <div className="bg-card border border-border rounded-xl p-5 space-y-4">
             <div className="space-y-1">
@@ -9,6 +9,7 @@ export default function CurrentInputFileSection({ t, form, setForm }) {
                 <label className="flex items-start gap-3 rounded-lg border border-border bg-background/60 p-4">
                     <input
                         type="checkbox"
+                        disabled={disabled}
                         checked={Boolean(form.current_input_file?.enabled)}
                         onChange={(e) => setForm((prev) => ({
                             ...prev,
@@ -17,7 +18,7 @@ export default function CurrentInputFileSection({ t, form, setForm }) {
                                 enabled: e.target.checked,
                             },
                         }))}
-                        className="mt-1 h-4 w-4 rounded border-border"
+                        className="mt-1 h-4 w-4 rounded border-border disabled:opacity-70"
                     />
                     <div className="space-y-1">
                         <span className="text-sm font-medium block">{t('settings.currentInputFileEnabled')}</span>
@@ -30,6 +31,7 @@ export default function CurrentInputFileSection({ t, form, setForm }) {
                         type="number"
                         min={0}
                         max={100000000}
+                        disabled={disabled}
                         value={form.current_input_file?.min_chars ?? 0}
                         onChange={(e) => setForm((prev) => ({
                             ...prev,
@@ -38,7 +40,7 @@ export default function CurrentInputFileSection({ t, form, setForm }) {
                                 min_chars: Number(e.target.value || 0),
                             },
                         }))}
-                        className="w-full bg-background border border-border rounded-lg px-3 py-2"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 disabled:opacity-70"
                     />
                     <p className="text-xs text-muted-foreground">{t('settings.currentInputFileHelp')}</p>
                 </label>

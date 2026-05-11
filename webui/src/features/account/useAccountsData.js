@@ -31,31 +31,16 @@ export function useAccountsData({ apiFetch }) {
         setLoadingAccounts(true)
         try {
             if (isMultiUser) {
-                // Multi-user mode: fetch from database
-                const data = await fetchMultiUserAccounts()
-                let filteredAccounts = data.accounts || []
+                const data = await fetchMultiUserAccounts({
+                    page: targetPage,
+                    pageSize: targetPageSize,
+                    query: targetQuery,
+                })
 
-                // Client-side search filter
-                if (targetQuery.trim()) {
-                    const q = targetQuery.toLowerCase()
-                    filteredAccounts = filteredAccounts.filter(acc =>
-                        (acc.name || '').toLowerCase().includes(q) ||
-                        (acc.email || '').toLowerCase().includes(q) ||
-                        (acc.mobile || '').toLowerCase().includes(q) ||
-                        (acc.remark || '').toLowerCase().includes(q)
-                    )
-                }
-
-                // Client-side pagination
-                const total = filteredAccounts.length
-                const start = (targetPage - 1) * targetPageSize
-                const end = start + targetPageSize
-                const paginatedAccounts = filteredAccounts.slice(start, end)
-
-                setAccounts(paginatedAccounts)
-                setTotalPages(Math.ceil(total / targetPageSize) || 1)
-                setTotalAccounts(total)
-                setPage(targetPage)
+                setAccounts(data.accounts || [])
+                setTotalPages(data.total_pages || 1)
+                setTotalAccounts(data.total || 0)
+                setPage(data.page || targetPage)
             } else {
                 // Legacy mode: fetch from config
                 let url = `/admin/accounts?page=${targetPage}&page_size=${targetPageSize}`

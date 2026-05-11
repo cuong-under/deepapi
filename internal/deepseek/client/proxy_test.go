@@ -68,7 +68,7 @@ func TestProxyConnectivityStatus(t *testing.T) {
 		wantText   string
 	}{
 		{name: "ok", statusCode: 200, success: true, wantText: "HTTP 200"},
-		{name: "challenge", statusCode: 403, success: true, wantText: "风控或挑战"},
+		{name: "challenge", statusCode: 403, success: true, wantText: "challenge"},
 		{name: "upstream error", statusCode: 502, success: false, wantText: "HTTP 502"},
 	}
 

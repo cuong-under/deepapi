@@ -77,3 +77,57 @@ func TestListAccountsMasksPasswordAndScopesAdminToSelf(t *testing.T) {
 		t.Fatalf("expected has_password=true")
 	}
 }
+
+func TestListAccountsSupportsSearchAndPagination(t *testing.T) {
+	db := openTestDB(t)
+	user, err := db.CreateUser("user", "user@example.com", "password123", "user")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	other, err := db.CreateUser("other", "other@example.com", "password123", "user")
+	if err != nil {
+		t.Fatalf("create other user: %v", err)
+	}
+	for _, item := range []struct {
+		name  string
+		email string
+	}{
+		{name: "Alpha", email: "alpha@example.com"},
+		{name: "Beta", email: "beta@example.com"},
+		{name: "Alpine", email: "alpine@example.com"},
+	} {
+		if _, err := db.CreateAccount(user.ID, item.name, "", item.email, "", "secret", ""); err != nil {
+			t.Fatalf("create account: %v", err)
+		}
+	}
+	if _, err := db.CreateAccount(other.ID, "Alpha other", "", "other-alpha@example.com", "", "secret", ""); err != nil {
+		t.Fatalf("create other account: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/user/accounts?q=alp&page=1&page_size=1", nil)
+	req = req.WithContext(withUser(req.Context(), user.ID, user.Username, user.Role))
+	rec := httptest.NewRecorder()
+
+	NewHandler(db, nil).ListAccounts(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		Accounts   []AccountResponse `json:"accounts"`
+		Total      int               `json:"total"`
+		Page       int               `json:"page"`
+		PageSize   int               `json:"page_size"`
+		TotalPages int               `json:"total_pages"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Total != 2 || len(payload.Accounts) != 1 || payload.Page != 1 || payload.PageSize != 1 || payload.TotalPages != 2 {
+		t.Fatalf("unexpected pagination payload: %+v", payload)
+	}
+	if payload.Accounts[0].UserID != user.ID {
+		t.Fatalf("leaked account from another user: %+v", payload.Accounts[0])
+	}
+}

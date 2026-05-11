@@ -1,4 +1,4 @@
-export default function BehaviorSection({ t, form, setForm }) {
+export default function BehaviorSection({ t, form, setForm, disabled = false }) {
     return (
         <div className="bg-card border border-border rounded-xl p-5 space-y-4">
             <h3 className="font-semibold">{t('settings.behaviorTitle')}</h3>
@@ -8,29 +8,32 @@ export default function BehaviorSection({ t, form, setForm }) {
                     <input
                         type="number"
                         min={30}
+                        disabled={disabled}
                         value={form.responses.store_ttl_seconds}
                         onChange={(e) => setForm((prev) => ({
                             ...prev,
                             responses: { ...prev.responses, store_ttl_seconds: Number(e.target.value || 30) },
                         }))}
-                        className="w-full bg-background border border-border rounded-lg px-3 py-2"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 disabled:opacity-70"
                     />
                 </label>
                 <label className="text-sm space-y-2">
                     <span className="text-muted-foreground">{t('settings.embeddingsProvider')}</span>
                     <input
                         type="text"
+                        disabled={disabled}
                         value={form.embeddings.provider}
                         onChange={(e) => setForm((prev) => ({
                             ...prev,
                             embeddings: { ...prev.embeddings, provider: e.target.value },
                         }))}
-                        className="w-full bg-background border border-border rounded-lg px-3 py-2"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 disabled:opacity-70"
                     />
                 </label>
                 <label className="flex items-start gap-3 rounded-lg border border-border bg-background/60 p-4">
                     <input
                         type="checkbox"
+                        disabled={disabled}
                         checked={Boolean(form.thinking_injection?.enabled ?? true)}
                         onChange={(e) => setForm((prev) => ({
                             ...prev,
@@ -39,7 +42,7 @@ export default function BehaviorSection({ t, form, setForm }) {
                                 enabled: e.target.checked,
                             },
                         }))}
-                        className="mt-1 h-4 w-4 rounded border-border"
+                        className="mt-1 h-4 w-4 rounded border-border disabled:opacity-70"
                     />
                     <div className="space-y-1">
                         <span className="text-sm font-medium block">{t('settings.thinkingInjectionEnabled')}</span>
@@ -50,6 +53,7 @@ export default function BehaviorSection({ t, form, setForm }) {
                     <span className="text-muted-foreground">{t('settings.thinkingInjectionPrompt')}</span>
                     <textarea
                         rows={5}
+                        disabled={disabled}
                         value={form.thinking_injection?.prompt || ''}
                         placeholder={form.thinking_injection?.default_prompt || ''}
                         onChange={(e) => setForm((prev) => ({
@@ -59,7 +63,7 @@ export default function BehaviorSection({ t, form, setForm }) {
                                 prompt: e.target.value,
                             },
                         }))}
-                        className="w-full bg-background border border-border rounded-lg px-3 py-2 resize-y min-h-32"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 resize-y min-h-32 disabled:opacity-70"
                     />
                     <p className="text-xs text-muted-foreground">{t('settings.thinkingInjectionPromptHelp')}</p>
                 </label>

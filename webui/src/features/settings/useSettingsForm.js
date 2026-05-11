@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
     fetchSettings,
+    fetchUserSettings,
     getExportData,
     postImportData,
     postPassword,
@@ -157,9 +158,25 @@ export function useSettingsForm({ apiFetch, t, onMessage, onRefresh, onForceLogo
                 setIsAdmin(true) // Legacy mode (no multi-user)
             }
 
-            // Only load settings if user is admin
             if (!userIsAdmin) {
-                setLoading(false)
+                const { res, data } = await fetchUserSettings(apiFetch, t)
+                if (!res.ok) {
+                    const detail = data.error || t('settings.loadFailed')
+                    setLastError(detail)
+                    onMessage('error', detail)
+                    trackLoadFailure()
+                    return
+                }
+                setConsecutiveFailures(0)
+                setAutoFetchPaused(false)
+                setLastError('')
+                setSettingsMeta({
+                    default_password_warning: false,
+                    env_backed: false,
+                    needs_vercel_sync: false,
+                    read_only: Boolean(data.read_only),
+                })
+                setForm(fromServerForm(data))
                 return
             }
 
@@ -237,7 +254,7 @@ export function useSettingsForm({ apiFetch, t, onMessage, onRefresh, onForceLogo
     }, [apiFetch, form, loadSettings, onMessage, onRefresh, t])
 
     const updatePassword = useCallback(async () => {
-        if (String(newPassword || '').trim().length < 4) {
+        if (String(newPassword || '').trim().length < 8) {
             onMessage('error', t('settings.passwordTooShort'))
             return
         }

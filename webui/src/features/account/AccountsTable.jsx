@@ -31,6 +31,7 @@ export default function AccountsTable({
     searchQuery,
     onSearchChange,
     envBacked = false,
+    isMultiUser = false,
 }) {
     const [copiedId, setCopiedId] = useState(null)
 
@@ -79,24 +80,12 @@ export default function AccountsTable({
                         <span className="font-medium">{t('accountManager.testingAllAccounts')}</span>
                         <span className="text-muted-foreground">{batchProgress.current} / {batchProgress.total}</span>
                     </div>
-                    <div className="w-full bg-muted rounded-full h-2 overflow-hidden mb-4">
+                    <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
                         <div
                             className="bg-primary h-full transition-all duration-300"
                             style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
                         />
                     </div>
-                    {batchProgress.results.length > 0 && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-32 overflow-y-auto custom-scrollbar">
-                            {batchProgress.results.map((r, i) => (
-                                <div key={i} className={clsx(
-                                    "text-xs px-2 py-1 rounded border truncate",
-                                    r.success ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" : "bg-destructive/10 border-destructive/20 text-destructive"
-                                )}>
-                                    {r.success ? '✓' : '✗'} {r.id}
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
             )}
 
@@ -232,7 +221,7 @@ export default function AccountsTable({
                             onChange={e => onPageSizeChange(Number(e.target.value))}
                             className="text-sm border border-border rounded-md px-2 py-1 bg-background text-foreground"
                         >
-                            {[10, 20, 50, 100, 500, 1000, 2000, 5000].map(s => (
+                            {(isMultiUser ? [10, 20, 50, 100] : [10, 20, 50, 100, 500, 1000, 2000, 5000]).map(s => (
                                 <option key={s} value={s}>{s}</option>
                             ))}
                         </select>

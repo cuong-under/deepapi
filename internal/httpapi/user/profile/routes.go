@@ -6,5 +6,6 @@ import (
 
 // RegisterRoutes registers profile routes
 func RegisterRoutes(r chi.Router, h *Handler) {
+	r.Get("/profile/settings", h.GetSettings)
 	r.Post("/profile/change-password", h.ChangePassword)
 }

@@ -3,20 +3,27 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
 type UserAccount struct {
-	ID              int64   `json:"id"`
-	UserID          int64   `json:"user_id"`
-	Name            string  `json:"name"`
-	Remark          string  `json:"remark"`
-	Email           string  `json:"email"`
-	Mobile          string  `json:"mobile"`
-	Password        string  `json:"password"`
-	ProxyID         string  `json:"proxy_id"`
-	CreatedAt       int64   `json:"created_at"`
-	LastRefreshedAt *int64  `json:"last_refreshed_at,omitempty"`
+	ID              int64  `json:"id"`
+	UserID          int64  `json:"user_id"`
+	Name            string `json:"name"`
+	Remark          string `json:"remark"`
+	Email           string `json:"email"`
+	Mobile          string `json:"mobile"`
+	Password        string `json:"password"`
+	ProxyID         string `json:"proxy_id"`
+	CreatedAt       int64  `json:"created_at"`
+	LastRefreshedAt *int64 `json:"last_refreshed_at,omitempty"`
+}
+
+type UserAccountListOptions struct {
+	Limit  int
+	Offset int
+	Search string
 }
 
 // CreateAccount creates a new account for a user
@@ -69,8 +76,71 @@ func (db *DB) GetAccountsByUserID(userID int64) ([]*UserAccount, error) {
 		}
 		accounts = append(accounts, &a)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate accounts: %w", err)
+	}
 
 	return accounts, nil
+}
+
+func (db *DB) ListAccountsByUserID(userID int64, opts UserAccountListOptions) ([]*UserAccount, int, error) {
+	if opts.Limit <= 0 {
+		opts.Limit = 10
+	}
+	if opts.Limit > 100 {
+		opts.Limit = 100
+	}
+	if opts.Offset < 0 {
+		opts.Offset = 0
+	}
+
+	where, args := buildUserAccountListWhere(userID, opts.Search)
+
+	var total int
+	if err := db.QueryRow("SELECT COUNT(*) FROM user_accounts"+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count user accounts: %w", err)
+	}
+
+	queryArgs := append([]interface{}{}, args...)
+	queryArgs = append(queryArgs, opts.Limit, opts.Offset)
+	rows, err := db.Query(`
+		SELECT id, user_id, name, remark, email, mobile, password, proxy_id, created_at, last_refreshed_at
+		FROM user_accounts`+where+`
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`, queryArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query user accounts: %w", err)
+	}
+	defer rows.Close()
+
+	var accounts []*UserAccount
+	for rows.Next() {
+		var a UserAccount
+		if err := rows.Scan(&a.ID, &a.UserID, &a.Name, &a.Remark, &a.Email, &a.Mobile, &a.Password, &a.ProxyID, &a.CreatedAt, &a.LastRefreshedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan account: %w", err)
+		}
+		accounts = append(accounts, &a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate user accounts: %w", err)
+	}
+
+	return accounts, total, nil
+}
+
+func buildUserAccountListWhere(userID int64, search string) (string, []interface{}) {
+	conditions := []string{"user_id = ?"}
+	args := []interface{}{userID}
+
+	search = strings.TrimSpace(search)
+	if search != "" {
+		conditions = append(conditions, "(LOWER(name) LIKE ? OR LOWER(remark) LIKE ? OR LOWER(email) LIKE ? OR LOWER(mobile) LIKE ?)")
+		pattern := "%" + strings.ToLower(search) + "%"
+		args = append(args, pattern, pattern, pattern, pattern)
+	}
+
+	return " WHERE " + strings.Join(conditions, " AND "), args
 }
 
 // GetAccountByID gets an account by ID

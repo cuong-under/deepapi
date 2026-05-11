@@ -12,6 +12,7 @@ import (
 	userauth "ds2api/internal/auth"
 	"ds2api/internal/config"
 	"ds2api/internal/database"
+	adminproxies "ds2api/internal/httpapi/admin/proxies"
 	adminupdate "ds2api/internal/httpapi/admin/update"
 	useradmin "ds2api/internal/httpapi/admin/users"
 	authhandler "ds2api/internal/httpapi/auth"
@@ -86,8 +87,9 @@ func RegisterMultiUserRoutes(r chi.Router, app *App) error {
 	authHandler := authhandler.NewHandler(db, jwtManager)
 	accountsHandler := useraccounts.NewHandler(db, app.DS)
 	keysHandler := userkeys.NewHandler(db)
-	profileHandler := userprofile.NewHandler(db)
+	profileHandler := userprofile.NewHandler(db, app.Store)
 	usersHandler := useradmin.NewHandler(db)
+	proxiesHandler := &adminproxies.Handler{Store: app.Store, Pool: app.Pool, DS: app.DS}
 	var updateHandler *adminupdate.GitHandler
 	if app.GitManager != nil {
 		updateHandler = adminupdate.NewGitHandler(app.GitManager)
@@ -123,6 +125,7 @@ func RegisterMultiUserRoutes(r chi.Router, app *App) error {
 		accountsHandler.RegisterRoutes(ur)
 		keysHandler.RegisterRoutes(ur)
 		userprofile.RegisterRoutes(ur, profileHandler)
+		adminproxies.RegisterRoutes(ur, proxiesHandler)
 	})
 
 	// Register admin-only routes (admin authentication required)

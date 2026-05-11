@@ -21,6 +21,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
 
     const {
         isMultiUser,
+        fetchAccounts: fetchMultiUserAccounts,
         createAccount: createMultiUserAccount,
         updateAccount: updateMultiUserAccount,
         deleteAccount: deleteMultiUserAccount,
@@ -30,7 +31,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
 
     const openAddKey = () => {
         setEditingKey(null)
-        setNewKey({ key: '', name: '', remark: '' })
+        setNewKey({ key: '', name: '', remark: '', createdKey: '' })
         setShowAddKey(true)
     }
 
@@ -41,6 +42,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
             key: item.key || '',
             name: item.name || '',
             remark: item.remark || '',
+            createdKey: '',
         })
         setShowAddKey(true)
     }
@@ -48,7 +50,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
     const closeKeyModal = () => {
         setShowAddKey(false)
         setEditingKey(null)
-        setNewKey({ key: '', name: '', remark: '' })
+        setNewKey({ key: '', name: '', remark: '', createdKey: '' })
     }
 
     const openAddAccount = () => {
@@ -115,7 +117,12 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
                     // Create new key (auto-generated)
                     const result = await createMultiUserKey({ name: newKey.name, remark: newKey.remark })
                     onMessage('success', t('accountManager.addKeySuccess'))
-                    closeKeyModal()
+                    setNewKey({
+                        key: result.api_key || '',
+                        name: result.name || newKey.name,
+                        remark: result.remark || newKey.remark,
+                        createdKey: result.api_key || '',
+                    })
                     onRefresh()
                 }
             } else {
@@ -332,12 +339,48 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         }
     }
 
+    const loadAccountsForBatchRefresh = async () => {
+        if (isMultiUser) {
+            const pageSize = 100
+            const firstPage = await fetchMultiUserAccounts({ page: 1, pageSize })
+            const total = Number(firstPage.total || firstPage.accounts?.length || 0)
+            const allAccounts = [...(firstPage.accounts || [])]
+            const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+            for (let page = 2; page <= totalPages; page++) {
+                const data = await fetchMultiUserAccounts({ page, pageSize })
+                allAccounts.push(...(data.accounts || []))
+            }
+
+            return allAccounts
+        }
+
+        const res = await apiFetch('/admin/accounts?page=1&page_size=5000')
+        if (!res.ok) throw new Error(t('messages.requestFailed'))
+        const data = await res.json()
+        return data.items || config.accounts || []
+    }
+
     const testAllAccounts = async () => {
         if (!confirm(t('accountManager.testAllConfirm'))) return
-        const allAccounts = config.accounts || []
-        if (allAccounts.length === 0) return
 
         setTestingAll(true)
+        setBatchProgress({ current: 0, total: 0, results: [] })
+
+        let allAccounts = []
+        try {
+            allAccounts = await loadAccountsForBatchRefresh()
+        } catch (e) {
+            setTestingAll(false)
+            onMessage('error', e.message || t('messages.networkError'))
+            return
+        }
+
+        if (allAccounts.length === 0) {
+            setTestingAll(false)
+            return
+        }
+
         setBatchProgress({ current: 0, total: allAccounts.length, results: [] })
 
         let successCount = 0
@@ -384,6 +427,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         fetchAccounts()
         onRefresh()
         setTestingAll(false)
+        setBatchProgress({ current: 0, total: 0, results: [] })
     }
 
     const deleteAllSessions = async (identifier) => {
@@ -426,10 +470,6 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
     }
 
     const updateAccountProxy = async (identifier, proxyID) => {
-        if (isMultiUser) {
-            onMessage('error', t('messages.requestFailed'))
-            return
-        }
         const accountID = String(identifier || '').trim()
         if (!accountID) {
             onMessage('error', t('accountManager.invalidIdentifier'))
@@ -437,14 +477,30 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         }
         setUpdatingProxy(prev => ({ ...prev, [accountID]: true }))
         try {
-            const res = await apiFetch(`/admin/accounts/${encodeURIComponent(accountID)}/proxy`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ proxy_id: proxyID || '' }),
-            })
+            let res
+            if (isMultiUser) {
+                const existing = config?.accounts?.find(acc => String(acc.id || '') === accountID)
+                res = await apiFetch(`/api/user/accounts/${encodeURIComponent(accountID)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: existing?.name || '',
+                        remark: existing?.remark || '',
+                        email: existing?.email || '',
+                        mobile: existing?.mobile || '',
+                        proxy_id: proxyID || '',
+                    }),
+                })
+            } else {
+                res = await apiFetch(`/admin/accounts/${encodeURIComponent(accountID)}/proxy`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ proxy_id: proxyID || '' }),
+                })
+            }
             const data = await res.json()
             if (!res.ok) {
-                onMessage('error', data.detail || t('messages.requestFailed'))
+                onMessage('error', data.detail || data.error || t('messages.requestFailed'))
                 return
             }
             onMessage('success', t('accountManager.proxyUpdateSuccess'))

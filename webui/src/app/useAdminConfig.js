@@ -15,11 +15,14 @@ export function useAdminConfig({ token, showMessage, t }) {
         try {
             if (isMultiUser) {
                 // Multi-user mode: fetch from user-specific endpoints
-                const [accountsRes, keysRes] = await Promise.all([
+                const [accountsRes, keysRes, proxiesRes] = await Promise.all([
                     fetch('/api/user/accounts', {
                         headers: { 'Authorization': `Bearer ${token}` }
                     }),
                     fetch('/api/user/keys', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }),
+                    fetch('/api/user/proxies', {
                         headers: { 'Authorization': `Bearer ${token}` }
                     })
                 ])
@@ -27,9 +30,11 @@ export function useAdminConfig({ token, showMessage, t }) {
                 if (accountsRes.ok && keysRes.ok) {
                     const accountsData = await accountsRes.json()
                     const keysData = await keysRes.json()
+                    const proxiesData = proxiesRes.ok ? await proxiesRes.json() : { items: [] }
                     setConfig({
                         accounts: accountsData.accounts || [],
                         keys: keysData.keys || [],
+                        proxies: proxiesData.items || [],
                         env_backed: false
                     })
                 }

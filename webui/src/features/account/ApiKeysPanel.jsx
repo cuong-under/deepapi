@@ -31,6 +31,7 @@ function fallbackCopyText(text) {
 export default function ApiKeysPanel({
     t,
     config,
+    isMultiUser = false,
     keysExpanded,
     setKeysExpanded,
     onAddKey,
@@ -81,6 +82,9 @@ export default function ApiKeysPanel({
                     <div>
                         <h2 className="text-lg font-semibold">{t('accountManager.apiKeysTitle')}</h2>
                         <p className="text-sm text-muted-foreground">{t('accountManager.apiKeysDesc')} ({apiKeys.length || 0})</p>
+                        {isMultiUser && (
+                            <p className="mt-1 text-xs text-amber-500">{t('accountManager.keyListPreviewHint')}</p>
+                        )}
                     </div>
                 </div>
                 <button

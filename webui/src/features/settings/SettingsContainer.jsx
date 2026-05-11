@@ -97,6 +97,22 @@ export default function SettingsContainer({ onRefresh, onMessage, authFetch, onF
                 isAdmin={isAdmin}
             />
 
+            {!isAdmin && (
+                <>
+                    <div className="p-4 rounded-lg border border-border bg-muted/30 text-sm text-muted-foreground">
+                        {t('settings.userReadOnlyHint')}
+                    </div>
+
+                    <BehaviorSection t={t} form={form} setForm={setForm} disabled />
+
+                    <CurrentInputFileSection t={t} form={form} setForm={setForm} disabled />
+
+                    <AutoDeleteSection t={t} form={form} setForm={setForm} disabled />
+
+                    <ModelSection t={t} form={form} setForm={setForm} disabled />
+                </>
+            )}
+
             {isAdmin && (
                 <>
                     <RuntimeSection t={t} form={form} setForm={setForm} />

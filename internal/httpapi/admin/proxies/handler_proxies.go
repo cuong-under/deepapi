@@ -3,8 +3,10 @@ package proxies
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -71,6 +73,144 @@ func (h *Handler) addProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "proxy": proxyResponse(proxy)})
+}
+
+type proxyImportError struct {
+	Line    int    `json:"line"`
+	Content string `json:"content"`
+	Error   string `json:"error"`
+}
+
+func (h *Handler) importProxies(w http.ResponseWriter, r *http.Request) {
+	var req map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	raw := fieldString(req, "text")
+	if raw == "" {
+		raw = fieldString(req, "proxies")
+	}
+	proxyType := strings.ToLower(strings.TrimSpace(fieldString(req, "type")))
+	if proxyType == "" {
+		proxyType = "socks5h"
+	}
+
+	parsed, parseErrors := parseProxyImportLines(raw, proxyType)
+	if len(parsed) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"detail": "no valid proxies to import",
+			"errors": parseErrors,
+		})
+		return
+	}
+
+	var imported []map[string]any
+	var skipped []map[string]any
+	err := h.Store.Update(func(c *config.Config) error {
+		existing := make(map[string]struct{}, len(c.Proxies)+len(parsed))
+		for _, proxy := range c.Proxies {
+			proxy = config.NormalizeProxy(proxy)
+			existing[proxyImportDedupeKey(proxy)] = struct{}{}
+		}
+
+		for _, proxy := range parsed {
+			proxy = config.NormalizeProxy(proxy)
+			key := proxyImportDedupeKey(proxy)
+			if _, ok := existing[key]; ok {
+				skipped = append(skipped, proxyResponse(proxy))
+				continue
+			}
+			c.Proxies = append(c.Proxies, proxy)
+			existing[key] = struct{}{}
+			imported = append(imported, proxyResponse(proxy))
+		}
+
+		return validateProxyMutation(c)
+	})
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error(), "errors": parseErrors})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":        true,
+		"imported":       imported,
+		"imported_count": len(imported),
+		"skipped":        skipped,
+		"skipped_count":  len(skipped),
+		"errors":         parseErrors,
+		"error_count":    len(parseErrors),
+	})
+}
+
+func parseProxyImportLines(raw string, proxyType string) ([]config.Proxy, []proxyImportError) {
+	var proxies []config.Proxy
+	var errors []proxyImportError
+
+	for index, line := range strings.Split(raw, "\n") {
+		lineNo := index + 1
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		proxy, err := parseProxyImportLine(line, proxyType)
+		if err != nil {
+			errors = append(errors, proxyImportError{
+				Line:    lineNo,
+				Content: line,
+				Error:   err.Error(),
+			})
+			continue
+		}
+		proxies = append(proxies, proxy)
+	}
+
+	return proxies, errors
+}
+
+func parseProxyImportLine(line string, proxyType string) (config.Proxy, error) {
+	parts := strings.Split(line, ":")
+	if len(parts) != 4 {
+		return config.Proxy{}, fmt.Errorf("expected host:port:username:password")
+	}
+
+	host := strings.TrimSpace(parts[0])
+	portRaw := strings.TrimSpace(parts[1])
+	username := strings.TrimSpace(parts[2])
+	password := strings.TrimSpace(parts[3])
+	if host == "" || portRaw == "" || username == "" || password == "" {
+		return config.Proxy{}, fmt.Errorf("host, port, username and password are required")
+	}
+
+	port, err := strconv.Atoi(portRaw)
+	if err != nil {
+		return config.Proxy{}, fmt.Errorf("invalid port")
+	}
+
+	proxy := config.NormalizeProxy(config.Proxy{
+		Type:     proxyType,
+		Host:     host,
+		Port:     port,
+		Username: username,
+		Password: password,
+	})
+	if proxy.Name == "" {
+		proxy.Name = fmt.Sprintf("%s:%d", proxy.Host, proxy.Port)
+	}
+	if err := config.ValidateProxyConfig([]config.Proxy{proxy}); err != nil {
+		return config.Proxy{}, err
+	}
+
+	return proxy, nil
+}
+
+func proxyImportDedupeKey(proxy config.Proxy) string {
+	proxy = config.NormalizeProxy(proxy)
+	return strings.Join([]string{
+		proxy.Type,
+		strings.ToLower(proxy.Host),
+		strconv.Itoa(proxy.Port),
+		proxy.Username,
+	}, "|")
 }
 
 func (h *Handler) updateProxy(w http.ResponseWriter, r *http.Request) {

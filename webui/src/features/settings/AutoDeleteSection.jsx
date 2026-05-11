@@ -1,6 +1,6 @@
 import { Trash2 } from 'lucide-react'
 
-export default function AutoDeleteSection({ t, form, setForm }) {
+export default function AutoDeleteSection({ t, form, setForm, disabled = false }) {
     const mode = form.auto_delete?.mode || 'none'
     const descKey = mode === 'single'
         ? 'settings.autoDeleteSingleDesc'
@@ -19,11 +19,12 @@ export default function AutoDeleteSection({ t, form, setForm }) {
                 <label className="text-sm font-medium leading-6">{t('settings.autoDeleteMode')}</label>
                 <select
                     value={mode}
+                    disabled={disabled}
                     onChange={(e) => setForm((prev) => ({
                         ...prev,
                         auto_delete: { ...(prev.auto_delete || {}), mode: e.target.value },
                     }))}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm leading-5 focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm leading-5 focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-70"
                 >
                     <option value="none">{t('settings.autoDeleteNone')}</option>
                     <option value="single">{t('settings.autoDeleteSingle')}</option>

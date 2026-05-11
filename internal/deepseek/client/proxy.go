@@ -186,11 +186,11 @@ func applyProxyConnectivityHeaders(req *http.Request) {
 func proxyConnectivityStatus(statusCode int) (bool, string) {
 	switch {
 	case statusCode >= 200 && statusCode < 300:
-		return true, fmt.Sprintf("代理可达，目标返回 HTTP %d", statusCode)
+		return true, fmt.Sprintf("Proxy khả dụng, target trả HTTP %d", statusCode)
 	case statusCode >= 300 && statusCode < 500:
-		return true, fmt.Sprintf("代理可达，但目标返回 HTTP %d（可能是风控或挑战）", statusCode)
+		return true, fmt.Sprintf("Proxy khả dụng, nhưng target trả HTTP %d (có thể bị kiểm tra/challenge)", statusCode)
 	default:
-		return false, fmt.Sprintf("目标返回 HTTP %d", statusCode)
+		return false, fmt.Sprintf("Target trả HTTP %d", statusCode)
 	}
 }
 
@@ -205,12 +205,12 @@ func TestProxyConnectivity(ctx context.Context, proxyCfg config.Proxy) map[strin
 	}
 
 	if err := config.ValidateProxyConfig([]config.Proxy{proxyCfg}); err != nil {
-		result["message"] = "代理配置无效: " + err.Error()
+		result["message"] = "Cấu hình proxy không hợp lệ: " + err.Error()
 		return result
 	}
 	dialContext, err := proxyDialContext(proxyCfg)
 	if err != nil {
-		result["message"] = "代理拨号器初始化失败: " + err.Error()
+		result["message"] = "Không thể khởi tạo kết nối proxy: " + err.Error()
 		return result
 	}
 

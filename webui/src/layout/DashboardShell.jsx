@@ -68,7 +68,9 @@ export default function DashboardShell({ token, currentUser, onLogout, config, f
 
     const navItems = [
         { id: 'accounts', label: t('nav.accounts.label'), icon: Users, description: t('nav.accounts.desc') },
-        { id: 'proxies', label: t('nav.proxies.label'), icon: Globe, description: t('nav.proxies.desc') },
+        ...(userRole === 'user' ? [
+            { id: 'proxies', label: t('nav.proxies.label'), icon: Globe, description: t('nav.proxies.desc') },
+        ] : []),
         { id: 'analytics', label: t('nav.analytics.label'), icon: BarChart3, description: t('nav.analytics.desc') },
         { id: 'test', label: t('nav.test.label'), icon: Server, description: t('nav.test.desc') },
         { id: 'history', label: t('nav.history.label'), icon: History, description: t('nav.history.desc') },

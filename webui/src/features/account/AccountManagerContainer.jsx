@@ -31,7 +31,7 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         handleSearchChange,
     } = useAccountsData({ apiFetch })
 
-    const { isMultiUser, fetchKeys } = useMultiUserAccounts(apiFetch)
+    const { isMultiUser, user, fetchKeys } = useMultiUserAccounts(apiFetch)
     const [apiKeys, setApiKeys] = React.useState([])
 
     // Fetch keys on mount and when isMultiUser changes
@@ -133,9 +133,19 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
 
             <QueueCards queueStatus={queueStatus} t={t} />
 
+            {isMultiUser && (
+                <UserOverviewCards
+                    user={user}
+                    totalAccounts={totalAccounts}
+                    apiKeys={apiKeys}
+                    accounts={accounts}
+                />
+            )}
+
             <ApiKeysPanel
                 t={t}
                 config={configWithKeys}
+                isMultiUser={isMultiUser}
                 keysExpanded={keysExpanded}
                 setKeysExpanded={setKeysExpanded}
                 onAddKey={openAddKey}
@@ -174,6 +184,7 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 searchQuery={searchQuery}
                 onSearchChange={handleSearchChange}
                 envBacked={Boolean(config?.env_backed)}
+                isMultiUser={isMultiUser}
             />
 
             <AddKeyModal
@@ -185,6 +196,7 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 loading={loading}
                 onClose={closeKeyModal}
                 onAdd={addKey}
+                isMultiUser={isMultiUser}
             />
 
             <AddAccountModal
@@ -207,6 +219,31 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 onClose={closeEditAccount}
                 onSave={updateAccount}
             />
+        </div>
+    )
+}
+
+function UserOverviewCards({ user, totalAccounts, apiKeys, accounts }) {
+    const activeAccounts = accounts.filter((account) => account.last_refreshed_at != null).length
+    const displayName = user?.email || user?.username || 'User'
+
+    return (
+        <div className="grid gap-3 md:grid-cols-4">
+            <OverviewCard label="Đang đăng nhập" value={displayName} compact />
+            <OverviewCard label="Tài khoản DeepSeek" value={totalAccounts} />
+            <OverviewCard label="API keys" value={apiKeys.length} />
+            <OverviewCard label="Đã làm mới trang này" value={activeAccounts} />
+        </div>
+    )
+}
+
+function OverviewCard({ label, value, compact = false }) {
+    return (
+        <div className="rounded-lg border border-border bg-card p-4">
+            <div className="text-xs font-medium uppercase text-muted-foreground">{label}</div>
+            <div className={`mt-2 font-bold text-foreground ${compact ? 'truncate text-sm' : 'text-2xl'}`} title={String(value)}>
+                {value}
+            </div>
         </div>
     )
 }

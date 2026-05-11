@@ -62,6 +62,64 @@ func TestAddProxyPersistsNormalizedProxy(t *testing.T) {
 	}
 }
 
+func TestImportProxiesParsesColonListAndSkipsDuplicates(t *testing.T) {
+	h := newAdminProxyTestHandler(t, `{"accounts":[]}`)
+
+	r := chi.NewRouter()
+	r.Post("/admin/proxies/import", h.importProxies)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/proxies/import", bytes.NewBufferString(`{
+		"type":"socks5h",
+		"text":"23.229.19.94:8689:jyuazfqf:88vcouw0org0\n23.229.19.94:8689:jyuazfqf:88vcouw0org0\n23.229.19.95:8690:user2:pass2\nbad-line"
+	}`))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if imported, _ := payload["imported_count"].(float64); imported != 2 {
+		t.Fatalf("expected 2 imported, got %#v", payload)
+	}
+	if skipped, _ := payload["skipped_count"].(float64); skipped != 1 {
+		t.Fatalf("expected 1 skipped, got %#v", payload)
+	}
+	if errorCount, _ := payload["error_count"].(float64); errorCount != 1 {
+		t.Fatalf("expected 1 parse error, got %#v", payload)
+	}
+
+	proxies := h.Store.Snapshot().Proxies
+	if len(proxies) != 2 {
+		t.Fatalf("expected 2 stored proxies, got %#v", proxies)
+	}
+	if proxies[1].Host != "23.229.19.95" || proxies[1].Port != 8690 || proxies[1].Username != "user2" || proxies[1].Password != "pass2" {
+		t.Fatalf("unexpected imported proxy: %#v", proxies[1])
+	}
+}
+
+func TestImportProxiesRejectsWhenNoValidLines(t *testing.T) {
+	h := newAdminProxyTestHandler(t, `{"accounts":[]}`)
+
+	r := chi.NewRouter()
+	r.Post("/admin/proxies/import", h.importProxies)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/proxies/import", bytes.NewBufferString(`{"text":"bad-line"}`))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(h.Store.Snapshot().Proxies) != 0 {
+		t.Fatalf("expected no proxies imported, got %#v", h.Store.Snapshot().Proxies)
+	}
+}
+
 func TestAddProxyDoesNotFailOnUnrelatedInvalidRuntimeConfig(t *testing.T) {
 	router := newHTTPAdminHarness(t, `{
 		"keys":["k1"],

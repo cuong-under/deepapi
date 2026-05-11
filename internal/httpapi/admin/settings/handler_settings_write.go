@@ -109,8 +109,8 @@ func (h *Handler) updateSettingsPassword(w http.ResponseWriter, r *http.Request)
 	if newPassword == "" {
 		newPassword = strings.TrimSpace(fieldString(req, "password"))
 	}
-	if len(newPassword) < 4 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "new password must be at least 4 characters"})
+	if len(newPassword) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "new password must be at least 8 characters"})
 		return
 	}
 
