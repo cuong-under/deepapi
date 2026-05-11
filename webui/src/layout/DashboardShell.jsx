@@ -148,7 +148,7 @@ export default function DashboardShell({ token, currentUser, onLogout, config, f
             case 'update':
                 return <UpdateContainer authFetch={authFetch} onUpdateComplete={loadVersion} />
             case 'users':
-                return <UserManagementContainer onMessage={showMessage} authFetch={authFetch} />
+                return <UserManagementContainer onMessage={showMessage} authFetch={authFetch} currentUser={activeUser} />
             case 'settings':
                 return <SettingsContainer onRefresh={fetchConfig} onMessage={showMessage} authFetch={authFetch} onForceLogout={onForceLogout} isVercel={isVercel} />
             default:
