@@ -107,6 +107,12 @@ func (h *GitHandler) performUpdate(ctx context.Context) {
 		return
 	}
 
+	h.updateStatus("validating", 10, "Checking merge safety...")
+	if err := h.GitManager.ValidateMerge(ctx); err != nil {
+		h.updateStatus("failed", 10, "Update requires manual merge", err.Error())
+		return
+	}
+
 	h.updateStatus("backing_up", 20, "Creating backup...")
 
 	// Step 2: Create backup

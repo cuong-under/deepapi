@@ -270,6 +270,28 @@ func (m *GitManager) MergeUpstream(ctx context.Context) error {
 	return nil
 }
 
+// ValidateMerge checks whether upstream can merge before creating backups or
+// changing the working tree.
+func (m *GitManager) ValidateMerge(ctx context.Context) error {
+	if err := m.ensureUpstreamRemote(ctx); err != nil {
+		return fmt.Errorf("ensure upstream remote: %w", err)
+	}
+	hasChanges, err := m.hasUncommittedChanges(ctx)
+	if err != nil {
+		return fmt.Errorf("check uncommitted changes: %w", err)
+	}
+	if hasChanges {
+		return fmt.Errorf("working tree has uncommitted changes; commit or backup your custom changes before updating")
+	}
+	cmd := exec.CommandContext(ctx, "git", "merge-tree", "--write-tree", "HEAD", m.upstreamBranch)
+	cmd.Dir = m.repoDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("upstream update has merge conflicts; manual merge required\n%s", strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
 // Rebuild rebuilds the application
 func (m *GitManager) Rebuild(ctx context.Context) error {
 	config.Logger.Info("[git-update] rebuilding application")

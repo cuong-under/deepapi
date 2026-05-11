@@ -98,6 +98,9 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
 
       if (data.stage === 'complete' || data.stage === 'failed') {
         setIsUpdating(false);
+        if (data.stage === 'failed') {
+          setError(data.error || data.message || 'Cập nhật thất bại');
+        }
         // Reload version info when update completes successfully
         if (data.stage === 'complete' && onUpdateComplete) {
           onUpdateComplete();
@@ -241,12 +244,18 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
       )}
 
       {/* Update Progress */}
-      {isUpdating && updateStatus && (
+      {updateStatus && (isUpdating || updateStatus.stage === 'failed') && (
         <div className="cyber-card p-6 border-2 border-cyan-500/50 glow-cyan">
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <RefreshCw className="w-6 h-6 text-cyan-400 animate-spin" />
-              <h2 className="text-xl font-bold text-cyan-400">{t('update.updating')}</h2>
+              {updateStatus.stage === 'failed' ? (
+                <AlertTriangle className="w-6 h-6 text-red-400" />
+              ) : (
+                <RefreshCw className="w-6 h-6 text-cyan-400 animate-spin" />
+              )}
+              <h2 className={`text-xl font-bold ${updateStatus.stage === 'failed' ? 'text-red-400' : 'text-cyan-400'}`}>
+                {updateStatus.stage === 'failed' ? 'Cập nhật thất bại' : t('update.updating')}
+              </h2>
             </div>
 
             <div className="space-y-2">
@@ -275,6 +284,18 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
                   <>
                     <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />
                     <span className="text-cyan-400">Đang khởi động cập nhật...</span>
+                  </>
+                )}
+                {updateStatus.stage === 'validating' && (
+                  <>
+                    <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />
+                    <span className="text-cyan-400">Đang kiểm tra khả năng merge...</span>
+                  </>
+                )}
+                {updateStatus.stage === 'failed' && (
+                  <>
+                    <AlertTriangle className="w-4 h-4 text-red-400" />
+                    <span className="text-red-400">{updateStatus.message}</span>
                   </>
                 )}
                 {updateStatus.stage === 'backing_up' && (
