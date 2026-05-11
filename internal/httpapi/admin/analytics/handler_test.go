@@ -102,6 +102,90 @@ func TestAggregateStatsGroupsLegacyUserByAPIKeyOwner(t *testing.T) {
 	}
 }
 
+func TestAggregateStatsCountsInMemoryIntegerUsage(t *testing.T) {
+	store := chathistory.New(filepath.Join(t.TempDir(), "history.json"))
+	h := &Handler{ChatHistory: store}
+
+	entry, err := store.Start(chathistory.StartParams{
+		CallerID:  "caller:test",
+		AccountID: "account",
+		UserID:    1,
+		Model:     "deepseek-chat",
+		UserInput: "hello",
+	})
+	if err != nil {
+		t.Fatalf("start history entry: %v", err)
+	}
+	entry, err = store.Update(entry.ID, chathistory.UpdateParams{
+		Status: "success",
+		Usage: map[string]any{
+			"prompt_tokens":     int64(11),
+			"completion_tokens": 7,
+			"total_tokens":      int(18),
+			"completion_tokens_details": map[string]any{
+				"reasoning_tokens": uint(3),
+			},
+		},
+		Completed: true,
+	})
+	if err != nil {
+		t.Fatalf("update history entry: %v", err)
+	}
+
+	file, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	day := time.UnixMilli(entry.CreatedAt).UTC().Format("2006-01-02")
+	stats := h.aggregateStats(file.Items, day, day, "", "", "", "")
+	if len(stats) != 1 {
+		t.Fatalf("expected one aggregate, got %d: %#v", len(stats), stats)
+	}
+	if stats[0].PromptTokens != 11 || stats[0].CompletionTokens != 7 || stats[0].TotalTokens != 18 || stats[0].ReasoningTokens != 3 {
+		t.Fatalf("bad integer usage aggregate: %#v", stats[0])
+	}
+}
+
+func TestAggregateStatsCountsInputOutputUsageAliases(t *testing.T) {
+	store := chathistory.New(filepath.Join(t.TempDir(), "history.json"))
+	h := &Handler{ChatHistory: store}
+
+	entry, err := store.Start(chathistory.StartParams{
+		CallerID:  "caller:test",
+		AccountID: "account",
+		UserID:    1,
+		Model:     "deepseek-chat",
+		UserInput: "hello",
+	})
+	if err != nil {
+		t.Fatalf("start history entry: %v", err)
+	}
+	entry, err = store.Update(entry.ID, chathistory.UpdateParams{
+		Status: "success",
+		Usage: map[string]any{
+			"input_tokens":  int64(13),
+			"output_tokens": int64(5),
+		},
+		Completed: true,
+	})
+	if err != nil {
+		t.Fatalf("update history entry: %v", err)
+	}
+
+	file, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	day := time.UnixMilli(entry.CreatedAt).UTC().Format("2006-01-02")
+	stats := h.aggregateStats(file.Items, day, day, "", "", "", "")
+	if len(stats) != 1 {
+		t.Fatalf("expected one aggregate, got %d: %#v", len(stats), stats)
+	}
+	if stats[0].PromptTokens != 13 || stats[0].CompletionTokens != 5 || stats[0].TotalTokens != 18 {
+		t.Fatalf("bad input/output usage aggregate: %#v", stats[0])
+	}
+}
+
 func addCompletedHistoryEntry(t *testing.T, store *chathistory.Store, userID, promptTokens, completionTokens int64) chathistory.Entry {
 	t.Helper()
 	return addCompletedHistoryEntryWithCaller(t, store, userID, "key", promptTokens, completionTokens)

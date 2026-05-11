@@ -190,16 +190,14 @@ func (h *Handler) GetOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	overview.TopModels = topModels
 
-	if isAdmin {
-		topUsers := h.aggregateStats(items, thirtyDaysAgo, today, "user", "", "", "")
-		sort.Slice(topUsers, func(i, j int) bool {
-			return topUsers[i].TotalTokens > topUsers[j].TotalTokens
-		})
-		if len(topUsers) > 10 {
-			topUsers = topUsers[:10]
-		}
-		overview.TopUsers = topUsers
+	topUsers := h.aggregateStats(items, thirtyDaysAgo, today, "user", "", "", "")
+	sort.Slice(topUsers, func(i, j int) bool {
+		return topUsers[i].TotalTokens > topUsers[j].TotalTokens
+	})
+	if len(topUsers) > 10 {
+		topUsers = topUsers[:10]
 	}
+	overview.TopUsers = topUsers
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(overview)
@@ -356,25 +354,22 @@ func (h *Handler) aggregateStats(
 
 		// Extract usage from detail entry
 		usage := detail.Usage
-		var entryPromptTokens, entryCompletionTokens int64
+		var entryPromptTokens, entryCompletionTokens, entryTotalTokens int64
 		if usage != nil {
-			if promptTokens, ok := usage["prompt_tokens"].(float64); ok {
-				entryPromptTokens = int64(promptTokens)
-				stat.PromptTokens += entryPromptTokens
+			entryPromptTokens = usageInt64(usage, "prompt_tokens", "input_tokens")
+			entryCompletionTokens = usageInt64(usage, "completion_tokens", "output_tokens")
+			entryTotalTokens = usageInt64(usage, "total_tokens")
+			if entryTotalTokens == 0 {
+				entryTotalTokens = entryPromptTokens + entryCompletionTokens
 			}
-			if completionTokens, ok := usage["completion_tokens"].(float64); ok {
-				entryCompletionTokens = int64(completionTokens)
-				stat.CompletionTokens += entryCompletionTokens
-			}
-			if totalTokens, ok := usage["total_tokens"].(float64); ok {
-				stat.TotalTokens += int64(totalTokens)
-			}
+
+			stat.PromptTokens += entryPromptTokens
+			stat.CompletionTokens += entryCompletionTokens
+			stat.TotalTokens += entryTotalTokens
 
 			// Extract reasoning tokens from completion_tokens_details
 			if details, ok := usage["completion_tokens_details"].(map[string]any); ok {
-				if reasoningTokens, ok := details["reasoning_tokens"].(float64); ok {
-					stat.ReasoningTokens += int64(reasoningTokens)
-				}
+				stat.ReasoningTokens += usageInt64(details, "reasoning_tokens")
 			}
 		}
 
@@ -506,4 +501,59 @@ func callerTokenIDForAnalytics(token string) string {
 	}
 	sum := sha256.Sum256([]byte(token))
 	return "caller:" + hex.EncodeToString(sum[:8])
+}
+
+func usageInt64(usage map[string]any, keys ...string) int64 {
+	for _, key := range keys {
+		if value, ok := usage[key]; ok {
+			if n, ok := anyInt64(value); ok {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+func anyInt64(value any) (int64, bool) {
+	switch v := value.(type) {
+	case int:
+		return int64(v), true
+	case int8:
+		return int64(v), true
+	case int16:
+		return int64(v), true
+	case int32:
+		return int64(v), true
+	case int64:
+		return v, true
+	case uint:
+		return int64(v), true
+	case uint8:
+		return int64(v), true
+	case uint16:
+		return int64(v), true
+	case uint32:
+		return int64(v), true
+	case uint64:
+		if v > uint64(^uint64(0)>>1) {
+			return 0, false
+		}
+		return int64(v), true
+	case float32:
+		return int64(v), true
+	case float64:
+		return int64(v), true
+	case json.Number:
+		n, err := v.Int64()
+		if err == nil {
+			return n, true
+		}
+		f, err := v.Float64()
+		if err != nil {
+			return 0, false
+		}
+		return int64(f), true
+	default:
+		return 0, false
+	}
 }
