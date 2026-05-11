@@ -7,18 +7,46 @@ export function useAdminConfig({ token, showMessage, t }) {
 
     const fetchConfig = useCallback(async () => {
         if (!token) return
+
+        // Check if multi-user mode
+        const storedUser = localStorage.getItem('ds2api_user') || sessionStorage.getItem('ds2api_user')
+        const isMultiUser = !!storedUser
+
         try {
-            const res = await fetch('/admin/config', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-            if (res.ok) {
-                const data = await res.json()
-                if (data?.env_backed) {
-                    localStorage.setItem(ENV_DRAFT_KEY, JSON.stringify(data))
-                } else {
-                    localStorage.removeItem(ENV_DRAFT_KEY)
+            if (isMultiUser) {
+                // Multi-user mode: fetch from user-specific endpoints
+                const [accountsRes, keysRes] = await Promise.all([
+                    fetch('/api/user/accounts', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }),
+                    fetch('/api/user/keys', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                ])
+
+                if (accountsRes.ok && keysRes.ok) {
+                    const accountsData = await accountsRes.json()
+                    const keysData = await keysRes.json()
+                    setConfig({
+                        accounts: accountsData.accounts || [],
+                        keys: keysData.keys || [],
+                        env_backed: false
+                    })
                 }
-                setConfig(data)
+            } else {
+                // Legacy mode: fetch from /admin/config
+                const res = await fetch('/admin/config', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+                if (res.ok) {
+                    const data = await res.json()
+                    if (data?.env_backed) {
+                        localStorage.setItem(ENV_DRAFT_KEY, JSON.stringify(data))
+                    } else {
+                        localStorage.removeItem(ENV_DRAFT_KEY)
+                    }
+                    setConfig(data)
+                }
             }
         } catch (e) {
             console.error('Failed to fetch config:', e)

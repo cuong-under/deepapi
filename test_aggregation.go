@@ -1,3 +1,5 @@
+//go:build tools
+
 package main
 
 import (
@@ -8,16 +10,16 @@ import (
 func main() {
 	// Entry timestamp from chat history
 	entryTimestamp := int64(1778087875739) // milliseconds
-	
+
 	// Convert to time
 	entryTime := time.Unix(entryTimestamp/1000, (entryTimestamp%1000)*1000000)
-	
+
 	// Today's date range
 	now := time.Now()
 	today := now.Format("2006-01-02")
 	start, _ := time.Parse("2006-01-02", today)
 	end := start.Add(24 * time.Hour)
-	
+
 	fmt.Println("Entry timestamp (ms):", entryTimestamp)
 	fmt.Println("Entry time:", entryTime)
 	fmt.Println("Entry date:", entryTime.Format("2006-01-02"))

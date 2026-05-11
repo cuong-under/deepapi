@@ -31,6 +31,7 @@ export default function ConfigPanel({
     config,
     customKeyActive,
     customKeyManaged,
+    usingSessionAuth,
 }) {
     const iconMap = {
         MessageSquare,
@@ -43,13 +44,16 @@ export default function ConfigPanel({
     }
     const selectedModel = models.find(m => m.id === model) || models[0]
     const SelectedModelIcon = selectedModel ? (iconMap[selectedModel.icon] || MessageSquare) : MessageSquare
-    const defaultKeyPreview = maskSecret(config.keys?.[0])
+    const firstKey = config.keys?.[0]
+    const defaultKeyPreview = typeof firstKey === 'string'
+        ? maskSecret(firstKey)
+        : (firstKey?.api_key_preview || maskSecret(firstKey?.api_key || firstKey?.key || ''))
     const hasModels = models.length > 0
 
     return (
         <div className={clsx(
-            "lg:col-span-3 flex flex-col transition-all duration-300 ease-in-out z-20 min-h-0",
-            configExpanded ? "h-auto" : "h-14 lg:h-full"
+            "lg:col-span-3 flex flex-col transition-all duration-300 ease-in-out z-20 min-h-0 lg:h-full",
+            configExpanded ? "h-auto" : "h-14"
         )}>
             <div className="bg-card border border-border rounded-xl flex flex-col h-full shadow-sm min-h-0 overflow-hidden">
                 <button
@@ -67,10 +71,7 @@ export default function ConfigPanel({
                     </div>
                 </button>
 
-                <div className={clsx(
-                    "p-4 flex flex-col gap-5",
-                    !configExpanded && "hidden lg:flex"
-                )}>
+                <div className="p-4 flex flex-col gap-5 overflow-y-auto">
                     <div className="space-y-2 shrink-0">
                         <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider ml-0.5">{t('apiTester.modelLabel')}</label>
                         <div className="relative">
@@ -182,6 +183,11 @@ export default function ConfigPanel({
                                 customKeyManaged ? "text-emerald-600" : "text-amber-600"
                             )}>
                                 {customKeyManaged ? t('apiTester.modeManaged') : t('apiTester.modeDirect')}
+                            </p>
+                        )}
+                        {usingSessionAuth && (
+                            <p className="text-[11px] mt-1 text-emerald-600">
+                                Đang dùng phiên đăng nhập hiện tại
                             </p>
                         )}
                     </div>

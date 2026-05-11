@@ -22,6 +22,7 @@ export default function ChatHistoryContainer({ authFetch, onMessage }) {
     const [refreshing, setRefreshing] = useState(false)
     const [selectedId, setSelectedId] = useState('')
     const [selectedDetail, setSelectedDetail] = useState(null)
+    const [detailLoading, setDetailLoading] = useState(false)
     const [savingLimit, setSavingLimit] = useState(false)
     const [clearing, setClearing] = useState(false)
     const [deletingId, setDeletingId] = useState('')
@@ -40,7 +41,7 @@ export default function ChatHistoryContainer({ authFetch, onMessage }) {
     const [pendingJumpToAssistant, setPendingJumpToAssistant] = useState(false)
 
     const inFlightRef = useRef(false)
-    const detailInFlightRef = useRef(false)
+    const detailRequestRef = useRef(0)
     const listETagRef = useRef('')
     const detailETagRef = useRef('')
     const assistantStartRef = useRef(null)
@@ -103,8 +104,10 @@ export default function ChatHistoryContainer({ authFetch, onMessage }) {
     }
 
     const loadDetail = async (id, { announceError = false } = {}) => {
-        if (!id || detailInFlightRef.current) return
-        detailInFlightRef.current = true
+        if (!id) return
+        const requestID = detailRequestRef.current + 1
+        detailRequestRef.current = requestID
+        setDetailLoading(true)
         try {
             const headers = {}
             if (detailETagRef.current) {
@@ -118,6 +121,9 @@ export default function ChatHistoryContainer({ authFetch, onMessage }) {
             if (!res.ok) {
                 throw new Error(data?.detail || t('chatHistory.loadFailed'))
             }
+            if (detailRequestRef.current !== requestID) {
+                return
+            }
             detailETagRef.current = res.headers.get('ETag') || ''
             setSelectedDetail(data.item || null)
         } catch (error) {
@@ -125,7 +131,9 @@ export default function ChatHistoryContainer({ authFetch, onMessage }) {
                 onMessage?.('error', error.message || t('chatHistory.loadFailed'))
             }
         } finally {
-            detailInFlightRef.current = false
+            if (detailRequestRef.current === requestID) {
+                setDetailLoading(false)
+            }
         }
     }
 
@@ -381,10 +389,10 @@ export default function ChatHistoryContainer({ authFetch, onMessage }) {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-[340px,minmax(0,1fr)] gap-6 h-[calc(100vh-240px)] min-h-[520px]">
+            <div className="grid grid-cols-1 md:grid-cols-[340px,minmax(0,1fr)] gap-6 h-[calc(100vh-240px)] min-h-[520px]">
                 <ChatHistoryListPane
                     items={items}
-                    selectedItem={selectedItem}
+                    selectedItem={selectedItem || selectedSummary}
                     deletingId={deletingId}
                     t={t}
                     lang={lang}
@@ -395,6 +403,7 @@ export default function ChatHistoryContainer({ authFetch, onMessage }) {
                 <DesktopDetailPane
                     selectedSummary={selectedSummary}
                     selectedItem={selectedItem}
+                    detailLoading={detailLoading}
                     t={t}
                     lang={lang}
                     viewMode={viewMode}

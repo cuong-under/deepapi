@@ -114,9 +114,11 @@ export function useSettingsForm({ apiFetch, t, onMessage, onRefresh, onForceLogo
     const [importMode, setImportMode] = useState('merge')
     const [importText, setImportText] = useState('')
     const [newPassword, setNewPassword] = useState('')
+    const [currentPassword, setCurrentPassword] = useState('')
     const [consecutiveFailures, setConsecutiveFailures] = useState(0)
     const [autoFetchPaused, setAutoFetchPaused] = useState(false)
     const [lastError, setLastError] = useState('')
+    const [isAdmin, setIsAdmin] = useState(true)
     const [settingsMeta, setSettingsMeta] = useState({
         default_password_warning: false,
         env_backed: false,
@@ -140,6 +142,27 @@ export function useSettingsForm({ apiFetch, t, onMessage, onRefresh, onForceLogo
         }
         setLoading(true)
         try {
+            // Check if user is admin by checking stored user info
+            const storedUser = localStorage.getItem('ds2api_user') || sessionStorage.getItem('ds2api_user')
+            let userIsAdmin = true
+            if (storedUser) {
+                try {
+                    const user = JSON.parse(storedUser)
+                    userIsAdmin = user.role === 'admin'
+                    setIsAdmin(userIsAdmin)
+                } catch (e) {
+                    setIsAdmin(true) // Default to admin for legacy mode
+                }
+            } else {
+                setIsAdmin(true) // Legacy mode (no multi-user)
+            }
+
+            // Only load settings if user is admin
+            if (!userIsAdmin) {
+                setLoading(false)
+                return
+            }
+
             const { res, data } = await fetchSettings(apiFetch, t)
             if (!res.ok) {
                 const detail = data.detail || t('settings.loadFailed')
@@ -218,24 +241,56 @@ export function useSettingsForm({ apiFetch, t, onMessage, onRefresh, onForceLogo
             onMessage('error', t('settings.passwordTooShort'))
             return
         }
+
         setChangingPassword(true)
         try {
-            const { res, data } = await postPassword(apiFetch, newPassword.trim())
-            if (!res.ok) {
-                onMessage('error', data.detail || t('settings.passwordUpdateFailed'))
-                return
-            }
-            onMessage('success', t('settings.passwordUpdated'))
-            setNewPassword('')
-            if (typeof onForceLogout === 'function') {
-                onForceLogout()
+            if (isAdmin) {
+                // Admin: use legacy endpoint
+                const { res, data } = await postPassword(apiFetch, newPassword.trim())
+                if (!res.ok) {
+                    onMessage('error', data.detail || t('settings.passwordUpdateFailed'))
+                    return
+                }
+                onMessage('success', t('settings.passwordUpdated'))
+                setNewPassword('')
+                if (typeof onForceLogout === 'function') {
+                    onForceLogout()
+                }
+            } else {
+                // Regular user: use new endpoint
+                if (String(currentPassword || '').trim().length === 0) {
+                    onMessage('error', t('settings.currentPasswordRequired'))
+                    return
+                }
+
+                const res = await apiFetch('/api/user/profile/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        current_password: currentPassword.trim(),
+                        new_password: newPassword.trim(),
+                    }),
+                })
+                const data = await res.json()
+
+                if (!res.ok) {
+                    onMessage('error', data.error || t('settings.passwordUpdateFailed'))
+                    return
+                }
+
+                onMessage('success', t('settings.passwordUpdated'))
+                setNewPassword('')
+                setCurrentPassword('')
+                if (typeof onForceLogout === 'function') {
+                    onForceLogout()
+                }
             }
         } catch (_e) {
             onMessage('error', t('settings.passwordUpdateFailed'))
         } finally {
             setChangingPassword(false)
         }
-    }, [apiFetch, newPassword, onForceLogout, onMessage, t])
+    }, [apiFetch, newPassword, currentPassword, isAdmin, onForceLogout, onMessage, t])
 
     const loadExportData = useCallback(async () => {
         try {
@@ -346,6 +401,9 @@ export function useSettingsForm({ apiFetch, t, onMessage, onRefresh, onForceLogo
         setImportText,
         newPassword,
         setNewPassword,
+        currentPassword,
+        setCurrentPassword,
+        isAdmin,
         consecutiveFailures,
         autoFetchPaused,
         lastError,

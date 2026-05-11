@@ -40,6 +40,14 @@ func RegisterRoutes(r chi.Router, h *Handler, analyticsHandler *analytics.Handle
 	versionHandler := &adminversion.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 
 	adminauth.RegisterPublicRoutes(r, authHandler)
+	// Register version endpoint without auth requirement (read-only)
+	adminversion.RegisterRoutes(r, versionHandler)
+	// Register history endpoint without admin requirement (filtered by user_id)
+	adminhistory.RegisterRoutes(r, historyHandler)
+	// Register analytics endpoint without admin requirement (filtered by user_id)
+	if analyticsHandler != nil {
+		analyticsHandler.RegisterRoutes(r)
+	}
 	r.Group(func(pr chi.Router) {
 		pr.Use(authHandler.RequireAdmin)
 		adminauth.RegisterProtectedRoutes(pr, authHandler)
@@ -50,11 +58,6 @@ func RegisterRoutes(r chi.Router, h *Handler, analyticsHandler *analytics.Handle
 		adminrawsamples.RegisterRoutes(pr, rawSamplesHandler)
 		adminvercel.RegisterRoutes(pr, vercelHandler)
 		admindevcapture.RegisterRoutes(pr, devCaptureHandler)
-		adminhistory.RegisterRoutes(pr, historyHandler)
-		adminversion.RegisterRoutes(pr, versionHandler)
-		if analyticsHandler != nil {
-			analyticsHandler.RegisterRoutes(pr)
-		}
 	})
 }
 

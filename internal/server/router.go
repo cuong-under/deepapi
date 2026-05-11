@@ -19,6 +19,7 @@ import (
 	"ds2api/internal/auth"
 	"ds2api/internal/chathistory"
 	"ds2api/internal/config"
+	"ds2api/internal/database"
 	dsclient "ds2api/internal/deepseek/client"
 	"ds2api/internal/httpapi/admin"
 	"ds2api/internal/httpapi/admin/analytics"
@@ -31,6 +32,7 @@ import (
 	"ds2api/internal/httpapi/openai/responses"
 	"ds2api/internal/httpapi/openai/shared"
 	"ds2api/internal/httpapi/requestbody"
+	custommiddleware "ds2api/internal/middleware"
 	"ds2api/internal/plugin"
 	updatepkg "ds2api/internal/update"
 	"ds2api/internal/webui"
@@ -43,7 +45,7 @@ import (
 type App struct {
 	Store         *config.Store
 	Pool          *account.Pool
-	Resolver      *auth.Resolver
+	Resolver      dsclient.AuthResolver
 	DS            *dsclient.Client
 	Router        http.Handler
 	PluginManager *plugin.Manager
@@ -57,9 +59,43 @@ func NewApp() (*App, error) {
 	}
 	pool := account.NewPool(store)
 	var dsClient *dsclient.Client
-	resolver := auth.NewResolver(store, pool, func(ctx context.Context, acc config.Account) (string, error) {
-		return dsClient.Login(ctx, acc)
-	})
+
+	// Check if multi-user mode is enabled
+	multiUserEnabled := os.Getenv("DS2API_MULTI_USER") == "true"
+	var resolver dsclient.AuthResolver
+	var authMiddleware *auth.Middleware
+	var multiUserDB *database.DB
+
+	if multiUserEnabled {
+		// Initialize database for multi-user mode
+		dbPath := filepath.Join(filepath.Dir(config.ConfigPath()), "ds2api.db")
+		db, err := database.Open(dbPath)
+		if err != nil {
+			return nil, fmt.Errorf("open database: %w", err)
+		}
+		multiUserDB = db
+
+		jwtSecret, err := loadOrCreateJWTSecret()
+		if err != nil {
+			return nil, fmt.Errorf("load JWT secret: %w", err)
+		}
+		jwtManager := auth.NewJWTManager(jwtSecret)
+
+		// Create auth middleware
+		authMiddleware = auth.NewMiddleware(jwtManager, db)
+
+		// Use MultiUserResolver for multi-user mode
+		resolver = auth.NewMultiUserResolver(db, store, pool, func(ctx context.Context, acc config.Account) (string, error) {
+			return dsClient.Login(ctx, acc)
+		})
+		config.Logger.Info("[multi-user] using MultiUserResolver for authentication")
+	} else {
+		// Use legacy Resolver for single-user mode
+		resolver = auth.NewResolver(store, pool, func(ctx context.Context, acc config.Account) (string, error) {
+			return dsClient.Login(ctx, acc)
+		})
+	}
+
 	dsClient = dsclient.NewClient(store, resolver)
 	if err := dsClient.PreloadPow(context.Background()); err != nil {
 		config.Logger.Warn("[PoW] init failed", "error", err)
@@ -151,6 +187,7 @@ func NewApp() (*App, error) {
 	analyticsHandler := &analytics.Handler{
 		ChatHistory: chatHistoryStore,
 		Store:       store,
+		DB:          multiUserDB,
 	}
 	// Initialize pricing cache
 	analyticsHandler.SetPricing(pricing)
@@ -167,9 +204,11 @@ func NewApp() (*App, error) {
 	r.Use(middleware.RealIP)
 	r.Use(filteredLogger())
 	r.Use(middleware.Recoverer)
+	r.Use(custommiddleware.SecurityHeaders) // Add security headers
 	r.Use(cors)
 	r.Use(requestbody.ValidateJSONUTF8)
 	r.Use(timeout(0))
+	r.Use(adminSPAFallback(webuiHandler))
 
 	healthzHandler := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -185,33 +224,64 @@ func NewApp() (*App, error) {
 	r.Head("/healthz", healthzHandler)
 	r.Get("/readyz", readyzHandler)
 	r.Head("/readyz", readyzHandler)
-	r.Get("/v1/models", modelsHandler.ListModels)
-	r.Get("/v1/models/{model_id}", modelsHandler.GetModel)
-	r.Post("/v1/chat/completions", chatHandler.ChatCompletions)
-	r.Post("/v1/responses", responsesHandler.Responses)
-	r.Get("/v1/responses/{response_id}", responsesHandler.GetResponseByID)
-	r.Post("/v1/files", filesHandler.UploadFile)
-	r.Get("/v1/files/{file_id}", filesHandler.RetrieveFile)
-	r.Post("/v1/embeddings", embeddingsHandler.Embeddings)
-	// Root OpenAI aliases support clients configured with the bare DS2API service URL.
-	r.Get("/models", modelsHandler.ListModels)
-	r.Get("/models/{model_id}", modelsHandler.GetModel)
-	r.Post("/chat/completions", chatHandler.ChatCompletions)
-	r.Post("/responses", responsesHandler.Responses)
-	r.Get("/responses/{response_id}", responsesHandler.GetResponseByID)
-	r.Post("/files", filesHandler.UploadFile)
-	r.Get("/files/{file_id}", filesHandler.RetrieveFile)
-	r.Post("/embeddings", embeddingsHandler.Embeddings)
+
+	// Wrap OpenAI endpoints with OptionalAuth in multi-user mode
+	if multiUserEnabled && authMiddleware != nil {
+		r.Group(func(ar chi.Router) {
+			ar.Use(authMiddleware.OptionalAuth)
+			ar.Get("/v1/models", modelsHandler.ListModels)
+			ar.Get("/v1/models/{model_id}", modelsHandler.GetModel)
+			ar.Post("/v1/chat/completions", chatHandler.ChatCompletions)
+			ar.Post("/v1/responses", responsesHandler.Responses)
+			ar.Get("/v1/responses/{response_id}", responsesHandler.GetResponseByID)
+			ar.Post("/v1/files", filesHandler.UploadFile)
+			ar.Get("/v1/files/{file_id}", filesHandler.RetrieveFile)
+			ar.Post("/v1/embeddings", embeddingsHandler.Embeddings)
+			// Root OpenAI aliases
+			ar.Get("/models", modelsHandler.ListModels)
+			ar.Get("/models/{model_id}", modelsHandler.GetModel)
+			ar.Post("/chat/completions", chatHandler.ChatCompletions)
+			ar.Post("/responses", responsesHandler.Responses)
+			ar.Get("/responses/{response_id}", responsesHandler.GetResponseByID)
+			ar.Post("/files", filesHandler.UploadFile)
+			ar.Get("/files/{file_id}", filesHandler.RetrieveFile)
+			ar.Post("/embeddings", embeddingsHandler.Embeddings)
+			// Analytics endpoints (filtered by user_id in handler)
+			ar.Get("/admin/analytics/overview", analyticsHandler.GetOverview)
+			ar.Get("/admin/analytics/token-usage", analyticsHandler.GetTokenUsage)
+		})
+	} else {
+		r.Get("/v1/models", modelsHandler.ListModels)
+		r.Get("/v1/models/{model_id}", modelsHandler.GetModel)
+		r.Post("/v1/chat/completions", chatHandler.ChatCompletions)
+		r.Post("/v1/responses", responsesHandler.Responses)
+		r.Get("/v1/responses/{response_id}", responsesHandler.GetResponseByID)
+		r.Post("/v1/files", filesHandler.UploadFile)
+		r.Get("/v1/files/{file_id}", filesHandler.RetrieveFile)
+		r.Post("/v1/embeddings", embeddingsHandler.Embeddings)
+		// Root OpenAI aliases
+		r.Get("/models", modelsHandler.ListModels)
+		r.Get("/models/{model_id}", modelsHandler.GetModel)
+		r.Post("/chat/completions", chatHandler.ChatCompletions)
+		r.Post("/responses", responsesHandler.Responses)
+		r.Get("/responses/{response_id}", responsesHandler.GetResponseByID)
+		r.Post("/files", filesHandler.UploadFile)
+		r.Get("/files/{file_id}", filesHandler.RetrieveFile)
+		r.Post("/embeddings", embeddingsHandler.Embeddings)
+	}
 	claude.RegisterRoutes(r, claudeHandler)
 	gemini.RegisterRoutes(r, geminiHandler)
 	r.Route("/admin", func(ar chi.Router) {
 		admin.RegisterRoutes(ar, adminHandler, analyticsHandler)
-		// Register update routes
-		update.RegisterRoutes(ar, updateHandler)
-		// Register plugin routes
-		if err := pluginManager.RegisterAllRoutes(ar); err != nil {
-			config.Logger.Warn("[plugin] failed to register plugin routes", "error", err)
-		}
+		ar.Group(func(pr chi.Router) {
+			pr.Use(requireAdminRequest(adminHandler.Store))
+			// Register update routes
+			update.RegisterRoutes(pr, updateHandler)
+			// Register plugin routes
+			if err := pluginManager.RegisterAllRoutes(pr); err != nil {
+				config.Logger.Warn("[plugin] failed to register plugin routes", "error", err)
+			}
+		})
 	})
 	webui.RegisterRoutes(r, webuiHandler)
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
@@ -221,7 +291,7 @@ func NewApp() (*App, error) {
 		http.NotFound(w, req)
 	})
 
-	return &App{
+	app := &App{
 		Store:         store,
 		Pool:          pool,
 		Resolver:      resolver,
@@ -229,7 +299,14 @@ func NewApp() (*App, error) {
 		Router:        r,
 		PluginManager: pluginManager,
 		GitManager:    gitManager,
-	}, nil
+	}
+
+	// Register multi-user routes if enabled
+	if err := RegisterMultiUserRoutes(r, app); err != nil {
+		config.Logger.Error("[multi-user] failed to register routes", "error", err)
+	}
+
+	return app, nil
 }
 
 // readVersion reads version from VERSION file or returns default
@@ -251,6 +328,54 @@ func readVersion() string {
 	}
 
 	return version
+}
+
+func requireAdminRequest(store auth.AdminConfigReader) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := auth.VerifyAdminRequestWithStore(r, store); err != nil {
+				status := http.StatusUnauthorized
+				if err.Error() == "admin access required" {
+					status = http.StatusForbidden
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(status)
+				_ = json.NewEncoder(w).Encode(map[string]any{"detail": err.Error()})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func adminSPAFallback(handler *webui.Handler) func(http.Handler) http.Handler {
+	spaRoutes := map[string]struct{}{
+		"/admin/accounts":  {},
+		"/admin/proxies":   {},
+		"/admin/analytics": {},
+		"/admin/test":      {},
+		"/admin/history":   {},
+		"/admin/import":    {},
+		"/admin/settings":  {},
+		"/admin/users":     {},
+		"/admin/update":    {},
+		"/admin/vercel":    {},
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet && wantsHTML(r) {
+				if _, ok := spaRoutes[strings.TrimRight(r.URL.Path, "/")]; ok && handler.HandleAdminFallback(w, r) {
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func wantsHTML(r *http.Request) bool {
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	return strings.Contains(accept, "text/html")
 }
 
 func timeout(d time.Duration) func(http.Handler) http.Handler {

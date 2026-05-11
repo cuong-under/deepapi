@@ -34,9 +34,17 @@ func startChatHistory(store *chathistory.Store, r *http.Request, a *auth.Request
 	if !shouldCaptureChatHistory(r) {
 		return nil
 	}
+
+	// Get UserID from context (multi-user mode)
+	var userID int64
+	if userCtx, ok := auth.GetUserContext(r.Context()); ok {
+		userID = userCtx.UserID
+	}
+
 	entry, err := store.Start(chathistory.StartParams{
 		CallerID:    strings.TrimSpace(a.CallerID),
 		AccountID:   strings.TrimSpace(a.AccountID),
+		UserID:      userID,
 		Surface:     "openai.chat_completions",
 		Model:       strings.TrimSpace(stdReq.ResponseModel),
 		Stream:      stdReq.Stream,
@@ -48,6 +56,7 @@ func startChatHistory(store *chathistory.Store, r *http.Request, a *auth.Request
 	startParams := chathistory.StartParams{
 		CallerID:    strings.TrimSpace(a.CallerID),
 		AccountID:   strings.TrimSpace(a.AccountID),
+		UserID:      userID,
 		Surface:     "openai.chat_completions",
 		Model:       strings.TrimSpace(stdReq.ResponseModel),
 		Stream:      stdReq.Stream,

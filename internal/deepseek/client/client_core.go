@@ -16,9 +16,18 @@ import (
 // intFrom is a package-internal alias for the shared util version.
 var intFrom = util.IntFrom
 
+// AuthResolver interface for dependency injection
+type AuthResolver interface {
+	Determine(req *http.Request) (*auth.RequestAuth, error)
+	DetermineCaller(req *http.Request) (*auth.RequestAuth, error)
+	Release(a *auth.RequestAuth)
+	RefreshToken(ctx context.Context, a *auth.RequestAuth) bool
+	SwitchAccount(ctx context.Context, a *auth.RequestAuth) bool
+}
+
 type Client struct {
 	Store      *config.Store
-	Auth       *auth.Resolver
+	Auth       AuthResolver
 	capture    *devcapture.Store
 	regular    trans.Doer
 	stream     trans.Doer
@@ -30,7 +39,7 @@ type Client struct {
 	proxyClients   map[string]requestClients
 }
 
-func NewClient(store *config.Store, resolver *auth.Resolver) *Client {
+func NewClient(store *config.Store, resolver AuthResolver) *Client {
 	return &Client{
 		Store:        store,
 		Auth:         resolver,

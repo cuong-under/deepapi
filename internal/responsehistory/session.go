@@ -49,6 +49,9 @@ func Start(params StartParams) *Session {
 		HistoryText: params.Standard.HistoryText,
 		FinalPrompt: params.Standard.FinalPrompt,
 	}
+	if userID, ok := auth.GetUserID(params.Request.Context()); ok {
+		startParams.UserID = userID
+	}
 	entry, err := params.Store.Start(startParams)
 	session := &Session{
 		store:       params.Store,

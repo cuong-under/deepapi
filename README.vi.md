@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="webui/public/ds2api-favicon.svg" width="128" height="128" alt="DS2API icon" />
+  <img src="webui/public/ds2api-favicon.svg" width="128" height="128" alt="DeepAPI icon" />
 </p>
 
-# DS2API - Phiên bản Vibecode
+# DeepAPI - Phiên bản Vibecode
 
 [![License](https://img.shields.io/github/license/cuong-under/deepapi.svg)](LICENSE)
 ![Stars](https://img.shields.io/github/stars/cuong-under/deepapi.svg)
@@ -87,7 +87,7 @@ Chuyển đổi khả năng chat của DeepSeek Web thành API tương thích v�
        │
        ▼
 ┌─────────────────────────────────────┐
-│         DS2API Gateway              │
+│         DeepAPI Gateway             │
 │  ┌──────────────────────────────┐  │
 │  │   API Compatibility Layer    │  │
 │  │  (OpenAI/Claude/Gemini)      │  │
@@ -288,7 +288,7 @@ File cấu hình chính: `config.json`
 ### Xem logs
 
 ```bash
-# DS2API logs
+# DeepAPI logs
 sudo journalctl -u ds2api -f
 
 # Cloudflare Tunnel logs (nếu có)

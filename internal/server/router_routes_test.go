@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -100,6 +101,55 @@ func TestAPIRoutesRemainRegistered(t *testing.T) {
 		"DELETE /admin/chat-history/{id}",
 		"PUT /admin/chat-history/settings",
 		"GET /admin/version",
+	} {
+		if !got[want] {
+			t.Fatalf("expected route %s to be registered", want)
+		}
+	}
+}
+
+func TestMultiUserAdminUpdateRoutesRemainRegistered(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir("../.."); err != nil {
+		t.Fatalf("chdir repo root: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(wd); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	}()
+
+	t.Setenv("DS2API_MULTI_USER", "true")
+	t.Setenv("DS2API_CONFIG_PATH", t.TempDir()+"/config.json")
+	t.Setenv("DS2API_ENV_WRITEBACK", "0")
+	t.Setenv("DS2API_ADMIN_PASSWORD", "admin-password-for-test")
+
+	app, err := NewApp()
+	if err != nil {
+		t.Fatalf("NewApp() error: %v", err)
+	}
+	routes, ok := app.Router.(chi.Routes)
+	if !ok {
+		t.Fatalf("app router does not expose chi routes: %T", app.Router)
+	}
+
+	got := map[string]bool{}
+	if err := chi.Walk(routes, func(method string, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		got[fmt.Sprintf("%s %s", method, route)] = true
+		return nil
+	}); err != nil {
+		t.Fatalf("walk routes: %v", err)
+	}
+
+	for _, want := range []string{
+		"GET /api/admin/update/check",
+		"POST /api/admin/update/install",
+		"GET /api/admin/update/status",
+		"GET /api/admin/update/backups",
+		"POST /api/admin/update/rollback",
 	} {
 		if !got[want] {
 			t.Fatalf("expected route %s to be registered", want)

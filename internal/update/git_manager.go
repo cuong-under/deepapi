@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,13 +15,21 @@ import (
 	"ds2api/internal/version"
 )
 
+const (
+	defaultUpstreamRemote = "upstream"
+	defaultUpstreamURL    = "https://github.com/CJackHwang/ds2api.git"
+	defaultUpstreamBranch = "main"
+)
+
 // GitManager quản lý Git-based update process
 type GitManager struct {
-	repoDir       string
-	currentBranch string
-	upstreamBranch string // "origin/main"
-	BackupDir     string
-	dataDir       string
+	repoDir        string
+	currentBranch  string
+	upstreamRemote string
+	upstreamURL    string
+	upstreamBranch string // "upstream/main"
+	BackupDir      string
+	dataDir        string
 }
 
 // GitUpdateInfo represents Git update information
@@ -50,10 +59,26 @@ func NewGitManager(repoDir string) (*GitManager, error) {
 	dataDir := filepath.Join(repoDir, "data")
 	backupDir := filepath.Join(dataDir, "backups")
 
+	upstreamRemote := strings.TrimSpace(os.Getenv("DS2API_UPSTREAM_REMOTE"))
+	if upstreamRemote == "" {
+		upstreamRemote = defaultUpstreamRemote
+	}
+	upstreamURL := strings.TrimSpace(os.Getenv("DS2API_UPSTREAM_URL"))
+	if upstreamURL == "" {
+		upstreamURL = defaultUpstreamURL
+	}
+	upstreamBranchName := strings.TrimSpace(os.Getenv("DS2API_UPSTREAM_BRANCH"))
+	if upstreamBranchName == "" {
+		upstreamBranchName = defaultUpstreamBranch
+	}
+	upstreamBranch := fmt.Sprintf("%s/%s", upstreamRemote, upstreamBranchName)
+
 	return &GitManager{
 		repoDir:        repoDir,
 		currentBranch:  currentBranch,
-		upstreamBranch: "origin/main",
+		upstreamRemote: upstreamRemote,
+		upstreamURL:    upstreamURL,
+		upstreamBranch: upstreamBranch,
 		BackupDir:      backupDir,
 		dataDir:        dataDir,
 	}, nil
@@ -62,6 +87,10 @@ func NewGitManager(repoDir string) (*GitManager, error) {
 // CheckUpdate checks if there are new commits on upstream
 func (m *GitManager) CheckUpdate(ctx context.Context) (*GitUpdateInfo, error) {
 	config.Logger.Info("[git-update] checking for updates", "branch", m.currentBranch, "upstream", m.upstreamBranch)
+
+	if err := m.ensureUpstreamRemote(ctx); err != nil {
+		return nil, fmt.Errorf("ensure upstream remote: %w", err)
+	}
 
 	// Fetch latest from remote
 	if err := m.gitFetch(ctx); err != nil {
@@ -80,7 +109,7 @@ func (m *GitManager) CheckUpdate(ctx context.Context) (*GitUpdateInfo, error) {
 		return nil, fmt.Errorf("get upstream commit: %w", err)
 	}
 
-	// Get commits behind (commits in origin/main not in current branch)
+	// Get commits behind (commits in upstream/main not in current branch)
 	commitsBehind, commitMessages, err := m.getCommitsBehind(ctx)
 	if err != nil {
 		config.Logger.Warn("[git-update] failed to get commits behind", "error", err)
@@ -211,6 +240,10 @@ func (m *GitManager) cleanupOldBackups(keepCount int) error {
 func (m *GitManager) MergeUpstream(ctx context.Context) error {
 	config.Logger.Info("[git-update] merging upstream", "from", m.upstreamBranch, "to", m.currentBranch)
 
+	if err := m.ensureUpstreamRemote(ctx); err != nil {
+		return fmt.Errorf("ensure upstream remote: %w", err)
+	}
+
 	// Check for uncommitted changes
 	hasChanges, err := m.hasUncommittedChanges(ctx)
 	if err != nil {
@@ -218,10 +251,7 @@ func (m *GitManager) MergeUpstream(ctx context.Context) error {
 	}
 
 	if hasChanges {
-		config.Logger.Warn("[git-update] uncommitted changes detected, stashing")
-		if err := m.gitStash(ctx); err != nil {
-			return fmt.Errorf("git stash: %w", err)
-		}
+		return fmt.Errorf("working tree has uncommitted changes; commit or backup your custom changes before updating")
 	}
 
 	// Merge upstream
@@ -234,14 +264,6 @@ func (m *GitManager) MergeUpstream(ctx context.Context) error {
 		}
 
 		return fmt.Errorf("git merge: %w", err)
-	}
-
-	// Pop stash if we stashed
-	if hasChanges {
-		config.Logger.Info("[git-update] restoring stashed changes")
-		if err := m.gitStashPop(ctx); err != nil {
-			config.Logger.Warn("[git-update] failed to restore stash", "error", err)
-		}
 	}
 
 	config.Logger.Info("[git-update] merge complete")
@@ -349,8 +371,46 @@ func getCurrentBranch(repoDir string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+func (m *GitManager) ensureUpstreamRemote(ctx context.Context) error {
+	remoteURL, err := m.getRemoteURL(ctx, m.upstreamRemote)
+	if err != nil {
+		config.Logger.Info("[git-update] adding upstream remote", "remote", m.upstreamRemote, "url", m.upstreamURL)
+		return m.runCommand(ctx, m.repoDir, "git", "remote", "add", m.upstreamRemote, m.upstreamURL)
+	}
+	if sameRemoteURL(remoteURL, m.upstreamURL) {
+		return nil
+	}
+	return fmt.Errorf("remote %q points to %q, expected %q", m.upstreamRemote, remoteURL, m.upstreamURL)
+}
+
+func (m *GitManager) getRemoteURL(ctx context.Context, remote string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", remote)
+	cmd.Dir = m.repoDir
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func sameRemoteURL(a, b string) bool {
+	return normalizeRemoteURL(a) == normalizeRemoteURL(b)
+}
+
+func normalizeRemoteURL(raw string) string {
+	raw = strings.TrimSpace(strings.TrimSuffix(raw, "/"))
+	raw = strings.TrimSuffix(raw, ".git")
+	if strings.HasPrefix(raw, "git@github.com:") {
+		raw = "https://github.com/" + strings.TrimPrefix(raw, "git@github.com:")
+	}
+	if parsed, err := url.Parse(raw); err == nil && parsed.Host != "" {
+		return strings.ToLower(parsed.Host + strings.TrimSuffix(parsed.Path, ".git"))
+	}
+	return strings.ToLower(raw)
+}
+
 func (m *GitManager) gitFetch(ctx context.Context) error {
-	return m.runCommand(ctx, m.repoDir, "git", "fetch", "origin")
+	return m.runCommand(ctx, m.repoDir, "git", "fetch", m.upstreamRemote)
 }
 
 func (m *GitManager) getCurrentCommit(ctx context.Context) (string, error) {
@@ -374,8 +434,7 @@ func (m *GitManager) getUpstreamCommit(ctx context.Context) (string, error) {
 }
 
 func (m *GitManager) getCommitsBehind(ctx context.Context) (int, []string, error) {
-	// Get commits in origin/main that are NOT in current branch
-	// Use merge-base to find common ancestor, then count commits from there to origin/main
+	// Get commits in upstream/main that are NOT in current branch.
 	cmd := exec.CommandContext(ctx, "git", "rev-list", "--count", fmt.Sprintf("%s..%s", m.currentBranch, m.upstreamBranch))
 	cmd.Dir = m.repoDir
 	output, err := cmd.Output()
@@ -386,7 +445,7 @@ func (m *GitManager) getCommitsBehind(ctx context.Context) (int, []string, error
 	var count int
 	fmt.Sscanf(string(output), "%d", &count)
 
-	// Get commit messages (commits in origin/main not in current branch)
+	// Get commit messages (commits in upstream/main not in current branch)
 	cmd = exec.CommandContext(ctx, "git", "log", "--oneline", fmt.Sprintf("%s..%s", m.currentBranch, m.upstreamBranch))
 	cmd.Dir = m.repoDir
 	output, err = cmd.Output()
@@ -410,14 +469,6 @@ func (m *GitManager) hasUncommittedChanges(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return len(strings.TrimSpace(string(output))) > 0, nil
-}
-
-func (m *GitManager) gitStash(ctx context.Context) error {
-	return m.runCommand(ctx, m.repoDir, "git", "stash", "push", "-m", "auto-update stash")
-}
-
-func (m *GitManager) gitStashPop(ctx context.Context) error {
-	return m.runCommand(ctx, m.repoDir, "git", "stash", "pop")
 }
 
 func (m *GitManager) gitMerge(ctx context.Context, branch string) error {

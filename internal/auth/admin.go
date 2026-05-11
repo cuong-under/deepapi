@@ -156,7 +156,11 @@ func VerifyAdminRequestWithStore(r *http.Request, store AdminConfigReader) error
 	if VerifyAdminCredential(token, store) {
 		return nil
 	}
-	if _, err := VerifyJWTWithStore(token, store); err == nil {
+	if payload, err := VerifyJWTWithStore(token, store); err == nil {
+		role, _ := payload["role"].(string)
+		if role != "admin" {
+			return errors.New("admin access required")
+		}
 		return nil
 	}
 	return errors.New("invalid credentials")

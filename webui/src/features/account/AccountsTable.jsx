@@ -108,7 +108,8 @@ export default function AccountsTable({
                         const id = resolveAccountIdentifier(acc)
                         const assignedProxy = proxies.find(proxy => proxy.id === acc.proxy_id)
                         const runtimeUnknown = envBacked && !acc.test_status
-                        const isActive = acc.test_status === 'ok' || acc.has_token
+                        // Check if account has been refreshed (has last_refreshed_at timestamp)
+                        const isActive = acc.last_refreshed_at != null
                         return (
                             <div key={i} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/50 transition-colors">
                                 <div className="flex items-center gap-3 min-w-0">
@@ -134,7 +135,14 @@ export default function AccountsTable({
                                             <div className="text-xs text-muted-foreground truncate mt-0.5">{acc.remark}</div>
                                         )}
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                                            <span>{acc.test_status === 'failed' ? t('accountManager.testStatusFailed') : isActive ? t('accountManager.sessionActive') : runtimeUnknown ? t('accountManager.runtimeStatusUnknown') : t('accountManager.reauthRequired')}</span>
+                                            <span>
+                                                {acc.test_status === 'failed'
+                                                    ? t('accountManager.testStatusFailed')
+                                                    : isActive
+                                                        ? t('accountManager.refreshed')
+                                                        : t('accountManager.needsRefresh')
+                                                }
+                                            </span>
                                             {acc.token_preview && (
                                                 <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-[10px]">
                                                     {acc.token_preview}
@@ -168,19 +176,21 @@ export default function AccountsTable({
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 self-start lg:self-auto ml-5 lg:ml-0">
-                                    <select
-                                        value={acc.proxy_id || ''}
-                                        onChange={e => onUpdateAccountProxy(id, e.target.value)}
-                                        disabled={updatingProxy?.[id]}
-                                        className="max-w-[180px] px-2.5 py-1.5 text-[10px] lg:text-xs bg-secondary border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                                    >
-                                        <option value="">{t('accountManager.proxyNone')}</option>
-                                        {proxies.map(proxy => (
-                                            <option key={proxy.id} value={proxy.id}>
-                                                {proxy.name || `${proxy.host}:${proxy.port}`}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    {proxies.length > 0 && (
+                                        <select
+                                            value={acc.proxy_id || ''}
+                                            onChange={e => onUpdateAccountProxy(id, e.target.value)}
+                                            disabled={updatingProxy?.[id]}
+                                            className="max-w-[180px] px-2.5 py-1.5 text-[10px] lg:text-xs bg-secondary border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                                        >
+                                            <option value="">{t('accountManager.proxyNone')}</option>
+                                            {proxies.map(proxy => (
+                                                <option key={proxy.id} value={proxy.id}>
+                                                    {proxy.name || `${proxy.host}:${proxy.port}`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
                                     <button
                                         onClick={() => onEditAccount(acc)}
                                         disabled={!id}

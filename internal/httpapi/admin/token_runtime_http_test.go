@@ -25,7 +25,7 @@ func newHTTPAdminHarness(t *testing.T, rawConfig string, ds adminshared.DeepSeek
 		DS:    ds,
 	}
 	r := chi.NewRouter()
-	RegisterRoutes(r, h)
+	RegisterRoutes(r, h, nil)
 	return r
 }
 

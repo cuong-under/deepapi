@@ -28,6 +28,9 @@ export default function SettingsContainer({ onRefresh, onMessage, authFetch, onF
         setImportText,
         newPassword,
         setNewPassword,
+        currentPassword,
+        setCurrentPassword,
+        isAdmin,
         consecutiveFailures,
         autoFetchPaused,
         lastError,
@@ -87,45 +90,52 @@ export default function SettingsContainer({ onRefresh, onMessage, authFetch, onF
                 setForm={setForm}
                 newPassword={newPassword}
                 setNewPassword={setNewPassword}
+                currentPassword={currentPassword}
+                setCurrentPassword={setCurrentPassword}
                 changingPassword={changingPassword}
                 onUpdatePassword={updatePassword}
+                isAdmin={isAdmin}
             />
 
-            <RuntimeSection t={t} form={form} setForm={setForm} />
+            {isAdmin && (
+                <>
+                    <RuntimeSection t={t} form={form} setForm={setForm} />
 
-            <BehaviorSection t={t} form={form} setForm={setForm} />
+                    <BehaviorSection t={t} form={form} setForm={setForm} />
 
-            <CurrentInputFileSection t={t} form={form} setForm={setForm} />
+                    <CurrentInputFileSection t={t} form={form} setForm={setForm} />
 
-            <AutoDeleteSection t={t} form={form} setForm={setForm} />
+                    <AutoDeleteSection t={t} form={form} setForm={setForm} />
 
-            <ModelSection t={t} form={form} setForm={setForm} />
+                    <ModelSection t={t} form={form} setForm={setForm} />
 
-            <BackupSection
-                t={t}
-                importMode={importMode}
-                setImportMode={setImportMode}
-                importing={importing}
-                onLoadExportData={loadExportData}
-                onDownloadExportFile={downloadExportFile}
-                onImport={doImport}
-                onImportFileChange={loadImportFile}
-                importText={importText}
-                setImportText={setImportText}
-                exportData={exportData}
-            />
+                    <BackupSection
+                        t={t}
+                        importMode={importMode}
+                        setImportMode={setImportMode}
+                        importing={importing}
+                        onLoadExportData={loadExportData}
+                        onDownloadExportFile={downloadExportFile}
+                        onImport={doImport}
+                        onImportFileChange={loadImportFile}
+                        importText={importText}
+                        setImportText={setImportText}
+                        exportData={exportData}
+                    />
 
-            <div className="flex justify-end">
-                <button
-                    type="button"
-                    onClick={saveSettings}
-                    disabled={loading || saving}
-                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2"
-                >
-                    <Save className="w-4 h-4" />
-                    {saving ? t('settings.saving') : t('settings.save')}
-                </button>
-            </div>
+                    <div className="flex justify-end">
+                        <button
+                            type="button"
+                            onClick={saveSettings}
+                            disabled={loading || saving}
+                            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2"
+                        >
+                            <Save className="w-4 h-4" />
+                            {saving ? t('settings.saving') : t('settings.save')}
+                        </button>
+                    </div>
+                </>
+            )}
         </div>
     )
 }

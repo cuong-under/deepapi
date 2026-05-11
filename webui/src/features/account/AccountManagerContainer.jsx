@@ -1,6 +1,8 @@
 import { useI18n } from '../../i18n'
+import React from 'react'
 import { useAccountsData } from './useAccountsData'
 import { useAccountActions } from './useAccountActions'
+import { useMultiUserAccounts } from './useMultiUserAccounts'
 import QueueCards from './QueueCards'
 import ApiKeysPanel from './ApiKeysPanel'
 import AccountsTable from './AccountsTable'
@@ -28,6 +30,33 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         searchQuery,
         handleSearchChange,
     } = useAccountsData({ apiFetch })
+
+    const { isMultiUser, fetchKeys } = useMultiUserAccounts(apiFetch)
+    const [apiKeys, setApiKeys] = React.useState([])
+
+    // Fetch keys on mount and when isMultiUser changes
+    React.useEffect(() => {
+        if (isMultiUser !== null) {
+            loadKeys()
+        }
+    }, [isMultiUser])
+
+    const loadKeys = async () => {
+        try {
+            const data = await fetchKeys()
+            setApiKeys(data.keys || [])
+        } catch (e) {
+            console.error('Failed to fetch keys:', e)
+        }
+    }
+
+    // Merge config with fetched keys for multi-user mode
+    const configWithKeys = React.useMemo(() => {
+        if (isMultiUser) {
+            return { ...config, api_keys: apiKeys }
+        }
+        return config
+    }, [config, apiKeys, isMultiUser])
 
     const {
         showAddKey,
@@ -70,7 +99,10 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         apiFetch,
         t,
         onMessage,
-        onRefresh,
+        onRefresh: () => {
+            onRefresh()
+            loadKeys() // Reload keys after any action
+        },
         config,
         fetchAccounts,
         resolveAccountIdentifier,
@@ -103,7 +135,7 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
 
             <ApiKeysPanel
                 t={t}
-                config={config}
+                config={configWithKeys}
                 keysExpanded={keysExpanded}
                 setKeysExpanded={setKeysExpanded}
                 onAddKey={openAddKey}

@@ -14,7 +14,8 @@ import {
     History,
     Loader2,
     BarChart3,
-    RefreshCw
+    RefreshCw,
+    UserCircle
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -31,6 +32,7 @@ const SettingsContainer = lazy(() => import('../features/settings/SettingsContai
 const ProxyManagerContainer = lazy(() => import('../features/proxy/ProxyManagerContainer'))
 const AnalyticsContainer = lazy(() => import('../features/analytics/AnalyticsContainer'))
 const UpdateContainer = lazy(() => import('../features/update/UpdateContainer'))
+const UserManagementContainer = lazy(() => import('../features/users/UserManagementContainer'))
 
 function TabLoadingFallback({ label }) {
     return (
@@ -43,11 +45,26 @@ function TabLoadingFallback({ label }) {
     )
 }
 
-export default function DashboardShell({ token, onLogout, config, fetchConfig, showMessage, message, onForceLogout, isVercel }) {
+export default function DashboardShell({ token, currentUser, onLogout, config, fetchConfig, showMessage, message, onForceLogout, isVercel }) {
     const { t } = useI18n()
     const location = useLocation()
     const navigate = useNavigate()
     const [sidebarOpen, setSidebarOpen] = useState(false)
+    const [storedUser, setStoredUser] = useState(null)
+    const activeUser = currentUser || storedUser
+    const userRole = activeUser?.role || null
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem('ds2api_user') || sessionStorage.getItem('ds2api_user')
+        if (storedUser) {
+            try {
+                const user = JSON.parse(storedUser)
+                setStoredUser(user)
+            } catch (e) {
+                setStoredUser(null)
+            }
+        }
+    }, [])
 
     const navItems = [
         { id: 'accounts', label: t('nav.accounts.label'), icon: Users, description: t('nav.accounts.desc') },
@@ -57,7 +74,10 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
         { id: 'history', label: t('nav.history.label'), icon: History, description: t('nav.history.desc') },
         { id: 'import', label: t('nav.import.label'), icon: Upload, description: t('nav.import.desc') },
         // { id: 'vercel', label: t('nav.vercel.label'), icon: Cloud, description: t('nav.vercel.desc') },
-        { id: 'update', label: t('nav.update.label'), icon: RefreshCw, description: t('nav.update.desc') },
+        ...(userRole === 'admin' ? [
+            { id: 'update', label: t('nav.update.label'), icon: RefreshCw, description: t('nav.update.desc') },
+            { id: 'users', label: t('nav.users.label'), icon: Users, description: t('nav.users.desc') },
+        ] : []),
         { id: 'settings', label: t('nav.settings.label'), icon: SettingsIcon, description: t('nav.settings.desc') },
     ]
 
@@ -78,6 +98,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
     }, [adminBasePath, navigate])
 
     const authFetch = useCallback(async (url, options = {}) => {
+        console.log('[authFetch] URL:', url, 'Token:', token ? token.substring(0, 20) + '...' : 'null')
         const headers = {
             ...options.headers,
             'Authorization': `Bearer ${token}`
@@ -85,6 +106,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
         const res = await fetch(url, { ...options, headers })
 
         if (res.status === 401) {
+            console.log('[authFetch] 401 Unauthorized, logging out')
             onLogout()
             throw new Error(t('auth.expired'))
         }
@@ -116,7 +138,7 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
             case 'analytics':
                 return <AnalyticsContainer onMessage={showMessage} authFetch={authFetch} />
             case 'test':
-                return <ApiTesterContainer config={config} onMessage={showMessage} authFetch={authFetch} />
+                return <ApiTesterContainer config={config} onMessage={showMessage} authFetch={authFetch} authToken={token} currentUser={activeUser} />
             case 'history':
                 return <ChatHistoryContainer onMessage={showMessage} authFetch={authFetch} />
             case 'import':
@@ -125,6 +147,8 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                 return <VercelSyncContainer onMessage={showMessage} authFetch={authFetch} isVercel={isVercel} config={config} />
             case 'update':
                 return <UpdateContainer authFetch={authFetch} onUpdateComplete={loadVersion} />
+            case 'users':
+                return <UserManagementContainer onMessage={showMessage} authFetch={authFetch} />
             case 'settings':
                 return <SettingsContainer onRefresh={fetchConfig} onMessage={showMessage} authFetch={authFetch} onForceLogout={onForceLogout} isVercel={isVercel} />
             default:
@@ -240,6 +264,15 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                             </svg>
                             Skill hỗ trợ Vibecode
                         </a>
+                        <a
+                            href="https://www.webshare.io/?referral_code=0ah52e2st71d"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full h-10 flex items-center justify-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-xs font-medium text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all"
+                        >
+                            <Globe className="w-3.5 h-3.5" />
+                            Lấy 10 proxy lifetime
+                        </a>
                         <button
                             onClick={onLogout}
                             className="w-full h-10 flex items-center justify-center gap-2 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/20 transition-all"
@@ -259,7 +292,14 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                             alt="DeepAPI Logo"
                             className="w-6 h-6 rounded"
                         />
-                        <span className="font-semibold text-sm">DeepAPI</span>
+                        <div className="min-w-0">
+                            <span className="font-semibold text-sm block leading-tight">DeepAPI</span>
+                            {activeUser && (
+                                <span className="block max-w-[180px] truncate text-[10px] text-muted-foreground" title={activeUser.email || activeUser.username}>
+                                    {activeUser.email || activeUser.username}
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <LanguageToggle />
@@ -301,9 +341,9 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                         </div>
 
                         {/* Footer - Community Info */}
-                        <footer className="mt-12 pt-8 border-t border-border/50">
-                            <div className="text-center space-y-3">
-                                <div className="inline-block px-4 py-2 rounded-lg border border-primary/30 bg-primary/5 glow-cyan">
+                        <footer className="relative left-1/2 mt-12 w-screen -translate-x-1/2 border-t border-border/50 pt-8 px-4 lg:w-[calc(100vw-16rem)] lg:px-10">
+                            <div className="relative flex min-h-[92px] flex-col items-center justify-center gap-4 text-center">
+                                <div className="inline-block px-4 py-2 rounded-lg border border-primary/30 bg-primary/5 glow-cyan lg:absolute lg:left-1/2 lg:top-0 lg:-translate-x-1/2">
                                     <p className="text-sm text-muted-foreground font-medium mb-1">
                                         Dự án phi lợi nhuận cho cộng đồng
                                     </p>
@@ -311,7 +351,23 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                                         VIBECODE VIETNAM
                                     </p>
                                 </div>
-                                <div className="flex items-center justify-center gap-3 text-sm text-muted-foreground">
+                                {activeUser && (
+                                    <div className="inline-flex h-12 max-w-[260px] items-center gap-2 rounded-full border border-primary/30 bg-card py-1 pl-1 pr-3 shadow-sm shadow-primary/10 lg:absolute lg:right-0 lg:top-0">
+                                        <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0">
+                                            <UserCircle className="w-5 h-5" />
+                                        </div>
+                                        <div className="min-w-0 text-left">
+                                            <div className="max-w-[170px] truncate text-xs font-semibold text-foreground" title={activeUser.email || activeUser.username}>
+                                                {activeUser.email || activeUser.username}
+                                            </div>
+                                            <div className="mt-0.5 inline-flex items-center rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-primary">
+                                                {activeUser.role || 'user'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="mt-3 flex items-center justify-center gap-3 text-sm text-muted-foreground">
                                     <span className="font-semibold text-foreground">Cuongunder</span>
                                     <span className="opacity-50">•</span>
                                     <a
@@ -323,7 +379,6 @@ export default function DashboardShell({ token, onLogout, config, fetchConfig, s
                                         <span>Telegram:</span>
                                         <span className="font-bold">@tiensinhcc</span>
                                     </a>
-                                </div>
                             </div>
                         </footer>
                     </div>

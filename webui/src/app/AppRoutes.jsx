@@ -16,6 +16,7 @@ export default function AppRoutes() {
     const isProduction = import.meta.env.MODE === 'production'
     const {
         token,
+        currentUser,
         authChecking,
         message,
         isAdminRoute,
@@ -50,6 +51,7 @@ export default function AppRoutes() {
                 token ? (
                     <DashboardShell
                         token={token}
+                        currentUser={currentUser}
                         onLogout={handleLogout}
                         config={config}
                         fetchConfig={fetchConfig}

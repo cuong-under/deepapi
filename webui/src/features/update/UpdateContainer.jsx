@@ -27,11 +27,19 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
     }
   }, [isUpdating]);
 
+  const updateFetch = async (path, options) => {
+    const res = await authFetch(`/api/admin/update${path}`, options);
+    if (res.status !== 404) {
+      return res;
+    }
+    return authFetch(`/admin/update${path}`, options);
+  };
+
   const checkForUpdates = async () => {
     setIsChecking(true);
     setError(null);
     try {
-      const res = await authFetch('/admin/update/check');
+      const res = await updateFetch('/check');
       if (!res.ok) throw new Error('Failed to check for updates');
       const data = await res.json();
       setUpdateInfo(data);
@@ -48,7 +56,7 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
     setIsUpdating(true);
     setError(null);
     try {
-      const res = await authFetch('/admin/update/install', {
+      const res = await updateFetch('/install', {
         method: 'POST'
       });
       if (!res.ok) throw new Error('Failed to start update');
@@ -61,7 +69,7 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
 
   const fetchUpdateStatus = async () => {
     try {
-      const res = await authFetch('/admin/update/status');
+      const res = await updateFetch('/status');
       if (!res.ok) throw new Error('Failed to fetch status');
       const data = await res.json();
       setUpdateStatus(data);
@@ -84,7 +92,7 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
 
   const loadBackups = async () => {
     try {
-      const res = await authFetch('/admin/update/backups');
+      const res = await updateFetch('/backups');
       if (!res.ok) throw new Error('Failed to load backups');
       const data = await res.json();
       setBackups(data.backups || []);
@@ -97,7 +105,7 @@ export default function UpdateContainer({ authFetch, onUpdateComplete }) {
     if (!confirm(t('update.confirm_rollback'))) return;
 
     try {
-      const res = await authFetch('/admin/update/rollback', {
+      const res = await updateFetch('/rollback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

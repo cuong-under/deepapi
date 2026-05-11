@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"ds2api/internal/config"
 )
@@ -27,6 +28,19 @@ func TestVerifyAdminRequest(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	if err := VerifyAdminRequest(req); err != nil {
 		t.Fatalf("expected token accepted: %v", err)
+	}
+}
+
+func TestVerifyAdminRequestRejectsUserRoleJWT(t *testing.T) {
+	t.Setenv("DS2API_JWT_SECRET", "test-secret")
+	token, err := NewJWTManager("test-secret").GenerateToken(42, "user1", "user", time.Hour)
+	if err != nil {
+		t.Fatalf("create user jwt failed: %v", err)
+	}
+	req, _ := http.NewRequest(http.MethodGet, "/admin/config", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	if err := VerifyAdminRequest(req); err == nil || err.Error() != "admin access required" {
+		t.Fatalf("expected admin access required, got %v", err)
 	}
 }
 

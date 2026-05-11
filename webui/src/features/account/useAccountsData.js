@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useMultiUserAccounts } from './useMultiUserAccounts'
 
 export function useAccountsData({ apiFetch }) {
     const [queueStatus, setQueueStatus] = useState(null)
@@ -11,25 +12,62 @@ export function useAccountsData({ apiFetch }) {
     const [totalAccounts, setTotalAccounts] = useState(0)
     const [loadingAccounts, setLoadingAccounts] = useState(false)
 
+    const { isMultiUser, fetchAccounts: fetchMultiUserAccounts } = useMultiUserAccounts(apiFetch)
+
     const resolveAccountIdentifier = (acc) => {
         if (!acc || typeof acc !== 'object') return ''
+        // Multi-user mode uses id, legacy uses identifier
+        if (isMultiUser) {
+            return String(acc.id || '')
+        }
         return String(acc.identifier || acc.email || acc.mobile || '').trim()
     }
 
     const [searchQuery, setSearchQuery] = useState('')
 
     const fetchAccounts = async (targetPage = page, targetPageSize = pageSize, targetQuery = searchQuery) => {
+        if (isMultiUser === null) return // Wait for multi-user check
+
         setLoadingAccounts(true)
         try {
-            let url = `/admin/accounts?page=${targetPage}&page_size=${targetPageSize}`
-            if (targetQuery.trim()) url += `&q=${encodeURIComponent(targetQuery.trim())}`
-            const res = await apiFetch(url)
-            if (res.ok) {
-                const data = await res.json()
-                setAccounts(data.items || [])
-                setTotalPages(data.total_pages || 1)
-                setTotalAccounts(data.total || 0)
-                setPage(data.page || 1)
+            if (isMultiUser) {
+                // Multi-user mode: fetch from database
+                const data = await fetchMultiUserAccounts()
+                let filteredAccounts = data.accounts || []
+
+                // Client-side search filter
+                if (targetQuery.trim()) {
+                    const q = targetQuery.toLowerCase()
+                    filteredAccounts = filteredAccounts.filter(acc =>
+                        (acc.name || '').toLowerCase().includes(q) ||
+                        (acc.email || '').toLowerCase().includes(q) ||
+                        (acc.mobile || '').toLowerCase().includes(q) ||
+                        (acc.remark || '').toLowerCase().includes(q)
+                    )
+                }
+
+                // Client-side pagination
+                const total = filteredAccounts.length
+                const start = (targetPage - 1) * targetPageSize
+                const end = start + targetPageSize
+                const paginatedAccounts = filteredAccounts.slice(start, end)
+
+                setAccounts(paginatedAccounts)
+                setTotalPages(Math.ceil(total / targetPageSize) || 1)
+                setTotalAccounts(total)
+                setPage(targetPage)
+            } else {
+                // Legacy mode: fetch from config
+                let url = `/admin/accounts?page=${targetPage}&page_size=${targetPageSize}`
+                if (targetQuery.trim()) url += `&q=${encodeURIComponent(targetQuery.trim())}`
+                const res = await apiFetch(url)
+                if (res.ok) {
+                    const data = await res.json()
+                    setAccounts(data.items || [])
+                    setTotalPages(data.total_pages || 1)
+                    setTotalAccounts(data.total || 0)
+                    setPage(data.page || 1)
+                }
             }
         } catch (e) {
             console.error('Failed to fetch accounts:', e)
@@ -61,11 +99,16 @@ export function useAccountsData({ apiFetch }) {
     }
 
     useEffect(() => {
-        fetchAccounts()
-        fetchQueueStatus()
-        const interval = setInterval(fetchQueueStatus, 5000)
-        return () => clearInterval(interval)
-    }, [])
+        if (isMultiUser !== null) {
+            fetchAccounts()
+            if (!isMultiUser) {
+                // Only fetch queue status in legacy mode
+                fetchQueueStatus()
+                const interval = setInterval(fetchQueueStatus, 5000)
+                return () => clearInterval(interval)
+            }
+        }
+    }, [isMultiUser])
 
     return {
         queueStatus,

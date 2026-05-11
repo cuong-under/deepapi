@@ -13,7 +13,11 @@ import (
 func (h *Handler) requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := authn.VerifyAdminRequestWithStore(r, h.Store); err != nil {
-			writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": err.Error()})
+			status := http.StatusUnauthorized
+			if err.Error() == "admin access required" {
+				status = http.StatusForbidden
+			}
+			writeJSON(w, status, map[string]any{"detail": err.Error()})
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -50,6 +54,11 @@ func (h *Handler) verify(w http.ResponseWriter, r *http.Request) {
 	payload, err := authn.VerifyJWTWithStore(token, h.Store)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": err.Error()})
+		return
+	}
+	role, _ := payload["role"].(string)
+	if role != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]any{"detail": "admin access required"})
 		return
 	}
 	exp, _ := payload["exp"].(float64)

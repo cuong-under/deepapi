@@ -1,19 +1,25 @@
 package analytics
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"ds2api/internal/auth"
 	"ds2api/internal/chathistory"
 	"ds2api/internal/config"
+	"ds2api/internal/database"
 )
 
 type Handler struct {
 	ChatHistory *chathistory.Store
 	Store       *config.Store
+	DB          *database.DB
 	pricing     config.PricingConfig // Cached pricing config
 }
 
@@ -30,30 +36,33 @@ func (h *Handler) SetPricing(p config.PricingConfig) {
 
 // TokenUsageStats represents aggregated token usage statistics
 type TokenUsageStats struct {
-	Period          string  `json:"period"`           // Date in YYYY-MM-DD format
-	AccountID       string  `json:"account_id"`       // Empty for aggregated stats
-	CallerID        string  `json:"caller_id"`        // Empty for aggregated stats
-	Model           string  `json:"model"`            // Empty for aggregated stats
-	PromptTokens    int64   `json:"prompt_tokens"`
-	CompletionTokens int64  `json:"completion_tokens"`
-	ReasoningTokens int64   `json:"reasoning_tokens"`
-	TotalTokens     int64   `json:"total_tokens"`
-	RequestCount    int64   `json:"request_count"`
-	SuccessCount    int64   `json:"success_count"`
-	ErrorCount      int64   `json:"error_count"`
-	TotalCost       float64 `json:"total_cost"`       // Calculated cost in configured currency
+	Period           string  `json:"period"`     // Date in YYYY-MM-DD format
+	AccountID        string  `json:"account_id"` // Empty for aggregated stats
+	CallerID         string  `json:"caller_id"`  // Empty for aggregated stats
+	Model            string  `json:"model"`      // Empty for aggregated stats
+	UserID           int64   `json:"user_id"`    // Empty for aggregated stats
+	UserLabel        string  `json:"user_label,omitempty"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+	ReasoningTokens  int64   `json:"reasoning_tokens"`
+	TotalTokens      int64   `json:"total_tokens"`
+	RequestCount     int64   `json:"request_count"`
+	SuccessCount     int64   `json:"success_count"`
+	ErrorCount       int64   `json:"error_count"`
+	TotalCost        float64 `json:"total_cost"` // Calculated cost in configured currency
 }
 
 // OverviewStats represents high-level overview statistics
 type OverviewStats struct {
-	Today              TokenUsageStats   `json:"today"`
-	Yesterday          TokenUsageStats   `json:"yesterday"`
-	Last7Days          TokenUsageStats   `json:"last_7_days"`
-	Last30Days         TokenUsageStats   `json:"last_30_days"`
-	TopAccounts        []TokenUsageStats `json:"top_accounts"`
-	TopCallers         []TokenUsageStats `json:"top_callers"`
-	TopModels          []TokenUsageStats `json:"top_models"`
-	Currency           string            `json:"currency"`
+	Today       TokenUsageStats   `json:"today"`
+	Yesterday   TokenUsageStats   `json:"yesterday"`
+	Last7Days   TokenUsageStats   `json:"last_7_days"`
+	Last30Days  TokenUsageStats   `json:"last_30_days"`
+	TopAccounts []TokenUsageStats `json:"top_accounts"`
+	TopCallers  []TokenUsageStats `json:"top_callers"`
+	TopModels   []TokenUsageStats `json:"top_models"`
+	TopUsers    []TokenUsageStats `json:"top_users"`
+	Currency    string            `json:"currency"`
 }
 
 // GetTokenUsage handles GET /admin/analytics/token-usage
@@ -63,7 +72,7 @@ func (h *Handler) GetTokenUsage(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	startDate := query.Get("start_date") // YYYY-MM-DD
 	endDate := query.Get("end_date")     // YYYY-MM-DD
-	groupBy := query.Get("group_by")     // day, account, caller, model
+	groupBy := query.Get("group_by")     // day, account, caller, model, user
 	accountID := query.Get("account_id")
 	callerID := query.Get("caller_id")
 	model := query.Get("model")
@@ -84,8 +93,10 @@ func (h *Handler) GetTokenUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	items := h.scopeItemsForRequest(file.Items, r)
+
 	// Aggregate statistics
-	stats := h.aggregateStats(file.Items, startDate, endDate, groupBy, accountID, callerID, model)
+	stats := h.aggregateStats(items, startDate, endDate, groupBy, accountID, callerID, model)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
@@ -105,6 +116,12 @@ func (h *Handler) GetOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if user is authenticated (multi-user mode)
+	userID, hasUserID := auth.GetUserID(r.Context())
+	isAdmin := auth.IsAdmin(r.Context())
+
+	items := h.scopeItems(file.Items, userID, hasUserID, isAdmin)
+
 	now := time.Now().UTC()
 	today := now.Format("2006-01-02")
 	yesterday := now.AddDate(0, 0, -1).Format("2006-01-02")
@@ -120,31 +137,31 @@ func (h *Handler) GetOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Today stats
-	todayStats := h.aggregateStats(file.Items, today, today, "", "", "", "")
+	todayStats := h.aggregateStats(items, today, today, "", "", "", "")
 	if len(todayStats) > 0 {
 		overview.Today = todayStats[0]
 	}
 
 	// Yesterday stats
-	yesterdayStats := h.aggregateStats(file.Items, yesterday, yesterday, "", "", "", "")
+	yesterdayStats := h.aggregateStats(items, yesterday, yesterday, "", "", "", "")
 	if len(yesterdayStats) > 0 {
 		overview.Yesterday = yesterdayStats[0]
 	}
 
 	// Last 7 days stats
-	last7Stats := h.aggregateStats(file.Items, sevenDaysAgo, today, "", "", "", "")
+	last7Stats := h.aggregateStats(items, sevenDaysAgo, today, "", "", "", "")
 	if len(last7Stats) > 0 {
 		overview.Last7Days = last7Stats[0]
 	}
 
 	// Last 30 days stats
-	last30Stats := h.aggregateStats(file.Items, thirtyDaysAgo, today, "", "", "", "")
+	last30Stats := h.aggregateStats(items, thirtyDaysAgo, today, "", "", "", "")
 	if len(last30Stats) > 0 {
 		overview.Last30Days = last30Stats[0]
 	}
 
 	// Top accounts (last 30 days)
-	topAccounts := h.aggregateStats(file.Items, thirtyDaysAgo, today, "account", "", "", "")
+	topAccounts := h.aggregateStats(items, thirtyDaysAgo, today, "account", "", "", "")
 	sort.Slice(topAccounts, func(i, j int) bool {
 		return topAccounts[i].TotalTokens > topAccounts[j].TotalTokens
 	})
@@ -154,7 +171,7 @@ func (h *Handler) GetOverview(w http.ResponseWriter, r *http.Request) {
 	overview.TopAccounts = topAccounts
 
 	// Top callers (last 30 days)
-	topCallers := h.aggregateStats(file.Items, thirtyDaysAgo, today, "caller", "", "", "")
+	topCallers := h.aggregateStats(items, thirtyDaysAgo, today, "caller", "", "", "")
 	sort.Slice(topCallers, func(i, j int) bool {
 		return topCallers[i].TotalTokens > topCallers[j].TotalTokens
 	})
@@ -164,7 +181,7 @@ func (h *Handler) GetOverview(w http.ResponseWriter, r *http.Request) {
 	overview.TopCallers = topCallers
 
 	// Top models (last 30 days)
-	topModels := h.aggregateStats(file.Items, thirtyDaysAgo, today, "model", "", "", "")
+	topModels := h.aggregateStats(items, thirtyDaysAgo, today, "model", "", "", "")
 	sort.Slice(topModels, func(i, j int) bool {
 		return topModels[i].TotalTokens > topModels[j].TotalTokens
 	})
@@ -173,8 +190,37 @@ func (h *Handler) GetOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	overview.TopModels = topModels
 
+	if isAdmin {
+		topUsers := h.aggregateStats(items, thirtyDaysAgo, today, "user", "", "", "")
+		sort.Slice(topUsers, func(i, j int) bool {
+			return topUsers[i].TotalTokens > topUsers[j].TotalTokens
+		})
+		if len(topUsers) > 10 {
+			topUsers = topUsers[:10]
+		}
+		overview.TopUsers = topUsers
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(overview)
+}
+
+func (h *Handler) scopeItemsForRequest(items []chathistory.SummaryEntry, r *http.Request) []chathistory.SummaryEntry {
+	userID, hasUserID := auth.GetUserID(r.Context())
+	return h.scopeItems(items, userID, hasUserID, auth.IsAdmin(r.Context()))
+}
+
+func (h *Handler) scopeItems(items []chathistory.SummaryEntry, userID int64, hasUserID, isAdmin bool) []chathistory.SummaryEntry {
+	if !hasUserID || isAdmin {
+		return items
+	}
+	filteredItems := make([]chathistory.SummaryEntry, 0)
+	for _, item := range items {
+		if item.UserID == userID {
+			filteredItems = append(filteredItems, item)
+		}
+	}
+	return filteredItems
 }
 
 func (h *Handler) aggregateStats(
@@ -191,6 +237,7 @@ func (h *Handler) aggregateStats(
 
 	// Map to aggregate stats
 	statsMap := make(map[string]*TokenUsageStats)
+	users := h.userDirectory()
 
 	config.Logger.Info("[analytics] aggregating stats",
 		"total_items", len(items),
@@ -242,6 +289,7 @@ func (h *Handler) aggregateStats(
 
 		// Determine grouping key
 		var key string
+		userID, userLabel := h.resolveItemUser(item, users)
 		switch groupBy {
 		case "day":
 			key = itemTime.Format("2006-01-02")
@@ -251,6 +299,11 @@ func (h *Handler) aggregateStats(
 			key = "caller:" + item.CallerID
 		case "model":
 			key = "model:" + item.Model
+		case "user":
+			if userID == 0 {
+				continue
+			}
+			key = "user:" + strconv.FormatInt(userID, 10)
 		default:
 			key = "total"
 		}
@@ -262,6 +315,8 @@ func (h *Handler) aggregateStats(
 				AccountID: item.AccountID,
 				CallerID:  item.CallerID,
 				Model:     item.Model,
+				UserID:    userID,
+				UserLabel: userLabel,
 			}
 
 			// Set appropriate fields based on groupBy
@@ -275,15 +330,25 @@ func (h *Handler) aggregateStats(
 			case "model":
 				statsMap[key].AccountID = ""
 				statsMap[key].CallerID = ""
+				statsMap[key].UserID = 0
+				statsMap[key].UserLabel = ""
+			case "user":
+				statsMap[key].AccountID = ""
+				statsMap[key].CallerID = ""
+				statsMap[key].Model = ""
 			case "day":
 				statsMap[key].AccountID = ""
 				statsMap[key].CallerID = ""
 				statsMap[key].Model = ""
+				statsMap[key].UserID = 0
+				statsMap[key].UserLabel = ""
 			default:
 				statsMap[key].Period = startDate + " to " + endDate
 				statsMap[key].AccountID = ""
 				statsMap[key].CallerID = ""
 				statsMap[key].Model = ""
+				statsMap[key].UserID = 0
+				statsMap[key].UserLabel = ""
 			}
 		}
 
@@ -374,4 +439,71 @@ func (h *Handler) aggregateStats(
 	})
 
 	return result
+}
+
+type userDirectory struct {
+	byID     map[int64]string
+	byCaller map[string]int64
+}
+
+func (h *Handler) userDirectory() userDirectory {
+	dir := userDirectory{
+		byID:     map[int64]string{},
+		byCaller: map[string]int64{},
+	}
+	if h == nil || h.DB == nil {
+		return dir
+	}
+	users, _, err := h.DB.ListUsers(1000, 0)
+	if err != nil {
+		config.Logger.Warn("[analytics] failed to list users for labels", "error", err)
+		return dir
+	}
+	for _, user := range users {
+		if user == nil {
+			continue
+		}
+		label := strings.TrimSpace(user.Email)
+		if label == "" {
+			label = strings.TrimSpace(user.Username)
+		}
+		if label != "" {
+			dir.byID[user.ID] = label
+		}
+	}
+	keys, err := h.DB.GetAllAPIKeys()
+	if err != nil {
+		config.Logger.Warn("[analytics] failed to list api keys for user mapping", "error", err)
+		return dir
+	}
+	for _, key := range keys {
+		if key == nil {
+			continue
+		}
+		callerID := callerTokenIDForAnalytics(key.APIKey)
+		if callerID != "" {
+			dir.byCaller[callerID] = key.UserID
+		}
+	}
+	return dir
+}
+
+func (h *Handler) resolveItemUser(item chathistory.SummaryEntry, dir userDirectory) (int64, string) {
+	userID := item.UserID
+	if userID == 0 && item.CallerID != "" {
+		userID = dir.byCaller[item.CallerID]
+	}
+	if userID == 0 {
+		return 0, ""
+	}
+	return userID, dir.byID[userID]
+}
+
+func callerTokenIDForAnalytics(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(token))
+	return "caller:" + hex.EncodeToString(sum[:8])
 }

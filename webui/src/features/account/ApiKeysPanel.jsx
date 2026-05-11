@@ -95,50 +95,57 @@ export default function ApiKeysPanel({
             {keysExpanded && (
                 <div className="divide-y divide-border border-t border-border">
                     {apiKeys.length > 0 ? (
-                        apiKeys.map((item, i) => (
-                            <div key={i} className="p-4 flex items-center justify-between hover:bg-muted/50 transition-colors group">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 flex-1">
-                                    <div className="text-sm">{item.name || '-'}</div>
-                                    <button
-                                        onClick={() => handleCopyKey(item.key)}
-                                        className="font-mono text-sm bg-muted/50 px-3 py-1 rounded inline-block hover:bg-muted transition-colors"
-                                        title={t('accountManager.copyKeyTitle')}
-                                    >
-                                        {maskSecret(item.key)}
-                                    </button>
-                                    <div className="text-sm text-muted-foreground truncate">{item.remark || '-'}</div>
-                                    {copiedKey === item.key && (
-                                        <span className="text-xs text-green-500 animate-pulse">{t('accountManager.copied')}</span>
-                                    )}
-                                    {failedKey === item.key && (
-                                        <span className="text-xs text-destructive">{t('accountManager.copyFailed')}</span>
-                                    )}
+                        apiKeys.map((item, i) => {
+                            const copyableKey = item.api_key || item.key || ''
+                            const displayKey = copyableKey || item.api_key_preview || '-'
+                            return (
+                                <div key={i} className="p-4 flex items-center justify-between hover:bg-muted/50 transition-colors group">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 flex-1">
+                                        <div className="text-sm">{item.name || '-'}</div>
+                                        <button
+                                            onClick={() => copyableKey && handleCopyKey(copyableKey)}
+                                            disabled={!copyableKey}
+                                            className="font-mono text-sm bg-muted/50 px-3 py-1 rounded inline-block hover:bg-muted transition-colors disabled:cursor-default disabled:opacity-80"
+                                            title={copyableKey ? t('accountManager.copyKeyTitle') : ''}
+                                        >
+                                            {copyableKey ? maskSecret(copyableKey) : displayKey}
+                                        </button>
+                                        <div className="text-sm text-muted-foreground truncate">{item.remark || '-'}</div>
+                                        {copyableKey && copiedKey === copyableKey && (
+                                            <span className="text-xs text-green-500 animate-pulse">{t('accountManager.copied')}</span>
+                                        )}
+                                        {copyableKey && failedKey === copyableKey && (
+                                            <span className="text-xs text-destructive">{t('accountManager.copyFailed')}</span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => onEditKey(item)}
+                                            className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
+                                            title={t('accountManager.editKeyTitle')}
+                                        >
+                                            <Pencil className="w-4 h-4" />
+                                        </button>
+                                        {copyableKey && (
+                                            <button
+                                                onClick={() => handleCopyKey(copyableKey)}
+                                                className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
+                                                title={t('accountManager.copyKeyTitle')}
+                                            >
+                                                {copiedKey === copyableKey ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => onDeleteKey(item.id || item.key)}
+                                            className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                                            title={t('accountManager.deleteKeyTitle')}
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => onEditKey(item)}
-                                        className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
-                                        title={t('accountManager.editKeyTitle')}
-                                    >
-                                        <Pencil className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => handleCopyKey(item.key)}
-                                        className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
-                                        title={t('accountManager.copyKeyTitle')}
-                                    >
-                                        {copiedKey === item.key ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                                    </button>
-                                    <button
-                                        onClick={() => onDeleteKey(item.key)}
-                                        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                                        title={t('accountManager.deleteKeyTitle')}
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))
+                            )
+                        })
                     ) : (
                         <div className="p-8 text-center text-muted-foreground">{t('accountManager.noApiKeys')}</div>
                     )}

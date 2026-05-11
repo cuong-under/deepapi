@@ -70,7 +70,7 @@ function decorateModel(t, modelID) {
     }
 }
 
-export default function ApiTesterContainer({ config, onMessage, authFetch }) {
+export default function ApiTesterContainer({ config, onMessage, authFetch, authToken, currentUser }) {
     const { t } = useI18n()
     const [availableModelIDs, setAvailableModelIDs] = useState([])
     const [modelsLoaded, setModelsLoaded] = useState(false)
@@ -109,11 +109,24 @@ export default function ApiTesterContainer({ config, onMessage, authFetch }) {
         return String(acc.identifier || acc.email || acc.mobile || '').trim()
     }
     const configuredKeys = config.keys || []
+    const isMultiUser = Boolean(currentUser)
     const trimmedApiKey = apiKey.trim()
-    const defaultKey = configuredKeys[0] || ''
-    const effectiveKey = trimmedApiKey || defaultKey
+    // Extract key string from object if needed
+    const defaultKey = configuredKeys[0]
+        ? (typeof configuredKeys[0] === 'string' ? configuredKeys[0] : (configuredKeys[0].api_key || configuredKeys[0].key || ''))
+        : ''
+    const effectiveKey = trimmedApiKey || defaultKey || (isMultiUser ? authToken : '')
     const customKeyActive = trimmedApiKey !== ''
-    const customKeyManaged = customKeyActive && configuredKeys.includes(trimmedApiKey)
+    const customKeyManaged = customKeyActive && configuredKeys.some(k =>
+        (typeof k === 'string' ? k : (k.api_key || k.key)) === trimmedApiKey
+    )
+
+    // Auto-select first key if no key is selected
+    useEffect(() => {
+        if (!isMultiUser && !apiKey && defaultKey) {
+            setApiKey(defaultKey)
+        }
+    }, [defaultKey, apiKey, isMultiUser, setApiKey])
 
     useEffect(() => {
         let disposed = false
@@ -206,6 +219,7 @@ export default function ApiTesterContainer({ config, onMessage, authFetch }) {
                 config={config}
                 customKeyActive={customKeyActive}
                 customKeyManaged={customKeyManaged}
+                usingSessionAuth={isMultiUser && !trimmedApiKey && !defaultKey}
             />
 
             <ChatPanel

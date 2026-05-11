@@ -2,6 +2,7 @@
     "language": {
         "label": "Language",
         "english": "English",
+        "vietnamese": "Vietnamese",
         "chinese": "中文"
     },
     "nav": {
@@ -32,6 +33,18 @@
         "settings": {
             "label": "Settings",
             "desc": "Edit runtime and security settings online"
+        },
+        "analytics": {
+            "label": "Token Analytics",
+            "desc": "View token usage and cost statistics"
+        },
+        "update": {
+            "label": "System Update",
+            "desc": "Check and install new releases"
+        },
+        "users": {
+            "label": "User Management",
+            "desc": "Manage users and roles"
         }
     },
     "sidebar": {
@@ -443,9 +456,48 @@
         "rememberSession": "Remember this session",
         "signIn": "Sign in",
         "secureConnection": "Secure connection",
-        "adminPortal": "DS2API admin portal",
+        "adminPortal": "DeepAPI admin portal",
         "signInFailed": "Sign-in failed.",
         "networkError": "Network error: {error}"
+    },
+    "analytics": {
+        "loading": "Loading analytics...",
+        "loadFailed": "Failed to load analytics.",
+        "overview": "Overview",
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "last7Days": "Last 7 days",
+        "last30Days": "Last 30 days",
+        "totalTokens": "Total tokens",
+        "totalRequests": "Total requests",
+        "totalCost": "Total cost",
+        "promptTokens": "Prompt tokens",
+        "completionTokens": "Completion tokens",
+        "reasoningTokens": "Reasoning tokens",
+        "successRate": "Success rate",
+        "topAccounts": "Top accounts",
+        "topCallers": "Top API keys",
+        "topModels": "Top models",
+        "topUsers": "Top users",
+        "usageByTime": "Usage by time",
+        "usageByAccount": "Usage by account",
+        "usageByModel": "Usage by model",
+        "dateRange": "Date range",
+        "filterByAccount": "Filter by account",
+        "filterByCaller": "Filter by API key",
+        "filterByModel": "Filter by model",
+        "allAccounts": "All accounts",
+        "allCallers": "All API keys",
+        "allModels": "All models",
+        "noData": "No data",
+        "account": "Account",
+        "caller": "API key",
+        "user": "User",
+        "model": "Model",
+        "requests": "Requests",
+        "tokens": "Tokens",
+        "cost": "Cost",
+        "compareYesterday": "Compared with yesterday"
     },
     "vercel": {
         "tokenRequired": "Vercel access token is required.",

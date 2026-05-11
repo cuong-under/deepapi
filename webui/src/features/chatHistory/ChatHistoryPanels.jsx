@@ -102,9 +102,9 @@ export function ChatHistoryListPane({ items, selectedItem, deletingId, t, lang, 
     )
 }
 
-export function DesktopDetailPane({ selectedSummary, selectedItem, t, lang, viewMode, setViewMode, detailScrollRef, assistantStartRef, onMessage }) {
+export function DesktopDetailPane({ selectedSummary, selectedItem, detailLoading, t, lang, viewMode, setViewMode, detailScrollRef, assistantStartRef, onMessage }) {
     return (
-        <div className="hidden lg:flex rounded-2xl border border-border bg-card shadow-sm min-h-0 overflow-hidden flex-col relative">
+        <div className="flex rounded-2xl border border-border bg-card shadow-sm min-h-0 overflow-hidden flex-col relative">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
                 <div>
                     <div className="text-sm font-semibold text-foreground">{t('chatHistory.detailTitle')}</div>
@@ -131,7 +131,14 @@ export function DesktopDetailPane({ selectedSummary, selectedItem, t, lang, view
             </div>
 
             <div ref={detailScrollRef} className="flex-1 overflow-y-auto p-5 lg:p-6 space-y-6">
-                {!selectedItem && (
+                {!selectedItem && detailLoading && (
+                    <div className="h-full rounded-xl border border-border bg-background/50 flex items-center justify-center gap-3 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {t('chatHistory.loading')}
+                    </div>
+                )}
+
+                {!selectedItem && !detailLoading && (
                     <div className="h-full rounded-xl border border-dashed border-border/80 bg-background/50 flex items-center justify-center text-sm text-muted-foreground">
                         {t('chatHistory.selectPrompt')}
                     </div>

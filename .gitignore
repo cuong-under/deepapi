@@ -15,6 +15,14 @@ opencode.json
 *.log
 logs/
 artifacts/
+server.log
+
+# Debug files
+*.png
+*.jpg
+debug_*.png
+test_*.png
+chat_debug_*.png
 
 # Vercel
 .vercel
@@ -39,6 +47,9 @@ internal/webui/assets/admin/
 # Go compiled binaries
 ds2api
 ds2api-tests
+*.exe
+*.db
+*:Zone.Identifier
 
 # Environment
 .env.local
@@ -53,9 +64,21 @@ htmlcov/
 coverage*.out
 cover/
 
+# Temporary test scripts
+test_*.py
+verify_*.py
+monitor_*.py
+
 # Misc
 .git/
 Thumbs.db
+
+# Temporary documentation
+*_TEMP.md
+*_OLD.md
+SUMMARY.md
+FIX_*.md
+HUONG_DAN_*.md
 
 # Claude Code
 .claude/

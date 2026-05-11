@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { TrendingUp, TrendingDown, DollarSign, Activity, Zap } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Activity, Zap, Users } from 'lucide-react'
 import { useI18n } from '../../i18n'
 
 export default function AnalyticsContainer({ authFetch, onMessage }) {
     const { t } = useI18n()
     const [loading, setLoading] = useState(true)
     const [overview, setOverview] = useState(null)
+    const [userLabels, setUserLabels] = useState({})
 
     useEffect(() => {
         loadOverview()
@@ -20,10 +21,30 @@ export default function AnalyticsContainer({ authFetch, onMessage }) {
             }
             const data = await res.json()
             setOverview(data)
+            if (data.top_users?.length > 0) {
+                await loadUserLabels()
+            }
         } catch (err) {
-            onMessage({ type: 'error', text: t('analytics.loadFailed') + ': ' + err.message })
+            onMessage?.('error', t('analytics.loadFailed') + ': ' + err.message)
         } finally {
             setLoading(false)
+        }
+    }
+
+    const loadUserLabels = async () => {
+        try {
+            const res = await authFetch('/api/admin/users')
+            if (!res.ok) {
+                return
+            }
+            const data = await res.json()
+            const labels = {}
+            for (const user of data.users || []) {
+                labels[user.id] = user.email || user.username || `User #${user.id}`
+            }
+            setUserLabels(labels)
+        } catch {
+            setUserLabels({})
         }
     }
 
@@ -217,6 +238,47 @@ export default function AnalyticsContainer({ authFetch, onMessage }) {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* User Usage */}
+            <div className="bg-card border border-border rounded-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="text-sm text-muted-foreground font-semibold uppercase tracking-wider">
+                        {t('analytics.topUsers')}
+                    </div>
+                    <Users className="w-5 h-5 text-primary" />
+                </div>
+                {overview.top_users && overview.top_users.length > 0 ? (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-border text-muted-foreground">
+                                    <th className="text-left font-semibold py-2 pr-4">{t('analytics.user')}</th>
+                                    <th className="text-right font-semibold py-2 px-4">{t('analytics.requests')}</th>
+                                    <th className="text-right font-semibold py-2 px-4">{t('analytics.tokens')}</th>
+                                    <th className="text-right font-semibold py-2 pl-4">{t('analytics.cost')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {overview.top_users.slice(0, 10).map((item, idx) => (
+                                    <tr key={item.user_id || idx} className="border-b border-border/60 last:border-0">
+                                        <td className="py-3 pr-4">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="text-xs font-bold text-primary w-5">{idx + 1}</span>
+                                                <span className="text-foreground font-medium truncate">{item.user_label || userLabels[item.user_id] || `User #${item.user_id}`}</span>
+                                            </div>
+                                        </td>
+                                        <td className="py-3 px-4 text-right text-muted-foreground">{formatNumber(item.request_count || 0)}</td>
+                                        <td className="py-3 px-4 text-right font-semibold text-foreground">{formatNumber(item.total_tokens || 0)}</td>
+                                        <td className="py-3 pl-4 text-right text-muted-foreground">{formatCost(item.total_cost || 0, overview.currency)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <div className="text-sm text-muted-foreground text-center py-4">{t('analytics.noData')}</div>
+                )}
             </div>
 
             {/* Top Lists */}
