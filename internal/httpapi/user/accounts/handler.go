@@ -1,7 +1,10 @@
 package accounts
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -13,16 +16,33 @@ import (
 	"ds2api/internal/config"
 	"ds2api/internal/database"
 	dsclient "ds2api/internal/deepseek/client"
+	"ds2api/internal/prompt"
+	"ds2api/internal/promptcompat"
+	"ds2api/internal/sse"
 )
+
+type deepSeekAccountClient interface {
+	Login(ctx context.Context, acc config.Account) (string, error)
+	CreateSession(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error)
+	GetPow(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error)
+	CallCompletion(ctx context.Context, a *auth.RequestAuth, payload map[string]any, powResp string, maxAttempts int) (*http.Response, error)
+}
 
 // Handler handles user account operations
 type Handler struct {
 	db *database.DB
-	ds *dsclient.Client
+	ds deepSeekAccountClient
 }
 
 // NewHandler creates a new accounts handler
 func NewHandler(db *database.DB, ds *dsclient.Client) *Handler {
+	return &Handler{
+		db: db,
+		ds: ds,
+	}
+}
+
+func newHandlerWithClient(db *database.DB, ds deepSeekAccountClient) *Handler {
 	return &Handler{
 		db: db,
 		ds: ds,
@@ -329,13 +349,23 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	// Use the DS client to login and verify account is still valid
 	ctx := r.Context()
-	_, err = h.ds.Login(ctx, configAccount)
+	token, err := h.ds.Login(ctx, configAccount)
 	if err != nil {
 		log.Printf("[RefreshToken] login failed: %v", err)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
 			"error":   "Failed to refresh token: " + err.Error(),
+		})
+		return
+	}
+
+	if err := h.deepSeekHealthCheck(ctx, configAccount, token); err != nil {
+		log.Printf("[RefreshToken] health check failed: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "DeepSeek account status check failed: " + err.Error(),
 		})
 		return
 	}
@@ -355,6 +385,47 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"message": "Token refreshed successfully",
+		"message": "Token refreshed and DeepSeek account status checked successfully",
 	})
+}
+
+func (h *Handler) deepSeekHealthCheck(ctx context.Context, acc config.Account, token string) error {
+	if h == nil || h.ds == nil {
+		return fmt.Errorf("DeepSeek client unavailable")
+	}
+	identifier := acc.Identifier()
+	authCtx := &auth.RequestAuth{UseConfigToken: false, DeepSeekToken: token, AccountID: identifier, Account: acc}
+	proxyCtx := auth.WithAuth(ctx, authCtx)
+	sessionID, err := h.ds.CreateSession(proxyCtx, authCtx, 1)
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	pow, err := h.ds.GetPow(proxyCtx, authCtx, 1)
+	if err != nil {
+		return fmt.Errorf("get PoW: %w", err)
+	}
+	payload := promptcompat.StandardRequest{
+		ResolvedModel: "deepseek-v4-flash",
+		FinalPrompt:   prompt.MessagesPrepare([]map[string]any{{"role": "user", "content": "ping"}}),
+		Thinking:      true,
+		Search:        false,
+	}.CompletionPayload(sessionID)
+	resp, err := h.ds.CallCompletion(proxyCtx, authCtx, payload, pow, 1)
+	if err != nil {
+		return fmt.Errorf("completion request: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		defer func() { _ = resp.Body.Close() }()
+		body, _ := io.ReadAll(resp.Body)
+		detail := strings.TrimSpace(string(body))
+		if detail != "" {
+			return fmt.Errorf("HTTP %d - %s", resp.StatusCode, detail)
+		}
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	collected := sse.CollectStream(resp, true, true)
+	if strings.TrimSpace(collected.Text) == "" {
+		return fmt.Errorf("DeepSeek returned empty output")
+	}
+	return nil
 }

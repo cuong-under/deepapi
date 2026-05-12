@@ -2,7 +2,9 @@ package admin
 
 import (
 	"context"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"ds2api/internal/account"
@@ -60,7 +62,7 @@ func (m *testingDSMock) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (s
 }
 
 func (m *testingDSMock) CallCompletion(_ context.Context, _ *auth.RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
-	return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("data: {\"p\":\"response/content\",\"v\":\"ok\"}\n\ndata: [DONE]\n\n"))}, nil
 }
 
 func (m *testingDSMock) DeleteAllSessionsForToken(_ context.Context, _ string) error {

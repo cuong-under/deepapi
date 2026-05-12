@@ -21,6 +21,8 @@ type testingDSMock struct {
 	createSessionCalls         int
 	getPowCalls                int
 	callCompletionCalls        int
+	completionStatus           int
+	completionBody             string
 	deleteAllSessionsCalls     int
 	deleteAllSessionsError     error
 	deleteAllSessionsErrorOnce bool
@@ -38,12 +40,23 @@ func (m *testingDSMock) CreateSession(_ context.Context, _ *auth.RequestAuth, _ 
 
 func (m *testingDSMock) GetPow(_ context.Context, _ *auth.RequestAuth, _ int) (string, error) {
 	m.getPowCalls++
-	return "", errors.New("should not call GetPow in this test")
+	return "pow-ok", nil
 }
 
 func (m *testingDSMock) CallCompletion(_ context.Context, _ *auth.RequestAuth, _ map[string]any, _ string, _ int) (*http.Response, error) {
 	m.callCompletionCalls++
-	return nil, errors.New("should not call CallCompletion in this test")
+	status := m.completionStatus
+	if status == 0 {
+		status = http.StatusOK
+	}
+	body := m.completionBody
+	if body == "" {
+		body = "data: {\"p\":\"response/content\",\"v\":\"ok\"}\n\ndata: [DONE]\n\n"
+	}
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}, nil
 }
 
 func (m *testingDSMock) DeleteAllSessionsForToken(_ context.Context, _ string) error {
@@ -62,7 +75,7 @@ func (m *testingDSMock) GetSessionCountForToken(_ context.Context, _ string) (*d
 	return &dsclient.SessionStats{Success: true}, nil
 }
 
-func TestTestAccount_BatchModeOnlyCreatesSession(t *testing.T) {
+func TestTestAccount_BatchModeRunsCompletionHealthCheck(t *testing.T) {
 	t.Setenv("DS2API_CONFIG_JSON", `{"accounts":[{"email":"batch@example.com","password":"pwd","token":""}]}`)
 	store := config.LoadStore()
 	ds := &testingDSMock{}
@@ -78,14 +91,14 @@ func TestTestAccount_BatchModeOnlyCreatesSession(t *testing.T) {
 		t.Fatalf("expected success=true, got %#v", result)
 	}
 	msg, _ := result["message"].(string)
-	if !strings.Contains(msg, "Token 刷新成功") {
+	if !strings.Contains(msg, "回复检测成功") {
 		t.Fatalf("expected session-only success message, got %q", msg)
 	}
 	if ds.loginCalls != 1 || ds.createSessionCalls != 1 {
 		t.Fatalf("unexpected Login/CreateSession calls: login=%d createSession=%d", ds.loginCalls, ds.createSessionCalls)
 	}
-	if ds.getPowCalls != 0 || ds.callCompletionCalls != 0 {
-		t.Fatalf("expected no completion flow calls, got getPow=%d callCompletion=%d", ds.getPowCalls, ds.callCompletionCalls)
+	if ds.getPowCalls != 1 || ds.callCompletionCalls != 1 {
+		t.Fatalf("expected completion health check calls, got getPow=%d callCompletion=%d", ds.getPowCalls, ds.callCompletionCalls)
 	}
 	updated, ok := store.FindAccount("batch@example.com")
 	if !ok {
@@ -97,6 +110,31 @@ func TestTestAccount_BatchModeOnlyCreatesSession(t *testing.T) {
 	testStatus, ok := store.AccountTestStatus("batch@example.com")
 	if !ok || testStatus != "ok" {
 		t.Fatalf("expected runtime test status ok, got %q (ok=%v)", testStatus, ok)
+	}
+}
+
+func TestTestAccount_BatchModeMarksMutedAccountFailed(t *testing.T) {
+	t.Setenv("DS2API_CONFIG_JSON", `{"accounts":[{"email":"muted@example.com","password":"pwd","token":""}]}`)
+	store := config.LoadStore()
+	ds := &testingDSMock{completionStatus: http.StatusTooManyRequests, completionBody: "user is muted"}
+	h := &Handler{Store: store, DS: ds}
+	acc, ok := store.FindAccount("muted@example.com")
+	if !ok {
+		t.Fatal("expected test account")
+	}
+
+	result := h.testAccount(context.Background(), acc, "deepseek-v4-flash", "")
+
+	if ok, _ := result["success"].(bool); ok {
+		t.Fatalf("expected success=false for muted account, got %#v", result)
+	}
+	msg, _ := result["message"].(string)
+	if !strings.Contains(msg, "user is muted") {
+		t.Fatalf("expected muted message, got %q", msg)
+	}
+	testStatus, ok := store.AccountTestStatus("muted@example.com")
+	if !ok || testStatus != "failed" {
+		t.Fatalf("expected runtime test status failed, got %q (ok=%v)", testStatus, ok)
 	}
 }
 
@@ -155,7 +193,7 @@ func (m *completionPayloadDSMock) CallCompletion(_ context.Context, _ *auth.Requ
 	m.payload = payload
 	return &http.Response{
 		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(strings.NewReader("data: {\"v\":\"ok\"}\n\ndata: [DONE]\n\n")),
+		Body:       io.NopCloser(strings.NewReader("data: {\"p\":\"response/content\",\"v\":\"ok\"}\n\ndata: [DONE]\n\n")),
 	}, nil
 }
 

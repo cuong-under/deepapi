@@ -151,14 +151,10 @@ func (h *Handler) testAccount(ctx context.Context, acc config.Account, model, me
 		result["session_count"] = sessionStats.FirstPageCount
 	}
 
+	healthCheckOnly := false
 	if strings.TrimSpace(message) == "" {
-		result["success"] = true
-		result["message"] = "Token 刷新成功（登录与会话创建成功）"
-		if warning, _ := result["config_warning"].(string); strings.TrimSpace(warning) != "" {
-			result["message"] = result["message"].(string) + "；" + warning
-		}
-		result["response_time"] = int(time.Since(start).Milliseconds())
-		return result
+		healthCheckOnly = true
+		message = "ping"
 	}
 	thinking, search, ok := config.GetModelConfig(model)
 	resolvedModel, resolved := config.ResolveModel(modelAliasSnapshotReader{
@@ -189,12 +185,29 @@ func (h *Handler) testAccount(ctx context.Context, acc config.Account, model, me
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer func() { _ = resp.Body.Close() }()
-		result["message"] = fmt.Sprintf("请求失败: HTTP %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		detail := strings.TrimSpace(string(body))
+		if detail != "" {
+			result["message"] = fmt.Sprintf("账号状态异常: HTTP %d - %s", resp.StatusCode, detail)
+		} else {
+			result["message"] = fmt.Sprintf("账号状态异常: HTTP %d", resp.StatusCode)
+		}
 		return result
 	}
 	collected := sse.CollectStream(resp, thinking, true)
-	result["success"] = true
 	result["response_time"] = int(time.Since(start).Milliseconds())
+	if strings.TrimSpace(collected.Text) == "" {
+		result["message"] = "账号状态异常: DeepSeek 返回空内容"
+		return result
+	}
+	result["success"] = true
+	if healthCheckOnly {
+		result["message"] = "Token 刷新成功（登录、会话创建与回复检测成功）"
+		if warning, _ := result["config_warning"].(string); strings.TrimSpace(warning) != "" {
+			result["message"] = result["message"].(string) + "；" + warning
+		}
+		return result
+	}
 	if collected.Text != "" {
 		result["message"] = collected.Text
 	} else {

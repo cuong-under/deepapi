@@ -3,13 +3,18 @@ package accounts
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+
 	"ds2api/internal/auth"
+	"ds2api/internal/config"
 	"ds2api/internal/database"
 )
 
@@ -129,5 +134,72 @@ func TestListAccountsSupportsSearchAndPagination(t *testing.T) {
 	}
 	if payload.Accounts[0].UserID != user.ID {
 		t.Fatalf("leaked account from another user: %+v", payload.Accounts[0])
+	}
+}
+
+type refreshTokenDSMock struct {
+	status int
+	body   string
+}
+
+func (m refreshTokenDSMock) Login(context.Context, config.Account) (string, error) {
+	return "new-token", nil
+}
+
+func (m refreshTokenDSMock) CreateSession(context.Context, *auth.RequestAuth, int) (string, error) {
+	return "session-id", nil
+}
+
+func (m refreshTokenDSMock) GetPow(context.Context, *auth.RequestAuth, int) (string, error) {
+	return "pow", nil
+}
+
+func (m refreshTokenDSMock) CallCompletion(context.Context, *auth.RequestAuth, map[string]any, string, int) (*http.Response, error) {
+	status := m.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	body := m.body
+	if body == "" {
+		body = "data: {\"p\":\"response/content\",\"v\":\"ok\"}\n\ndata: [DONE]\n\n"
+	}
+	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body))}, nil
+}
+
+func TestRefreshTokenChecksDeepSeekAccountStatus(t *testing.T) {
+	db := openTestDB(t)
+	user, err := db.CreateUser("user", "user@example.com", "password123", "user")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	account, err := db.CreateAccount(user.ID, "muted", "", "muted@example.com", "", "secret", "")
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/user/accounts/1/refresh-token", nil)
+	req = req.WithContext(withUser(req.Context(), user.ID, user.Username, user.Role))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("id", strconv.FormatInt(account.ID, 10))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+	rec := httptest.NewRecorder()
+
+	newHandlerWithClient(db, refreshTokenDSMock{
+		status: http.StatusTooManyRequests,
+		body:   "user is muted",
+	}).RefreshToken(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "user is muted") {
+		t.Fatalf("expected muted detail, got %s", rec.Body.String())
+	}
+	updated, err := db.GetAccountByID(account.ID)
+	if err != nil {
+		t.Fatalf("get account: %v", err)
+	}
+	if updated.LastRefreshedAt != nil {
+		t.Fatalf("muted account should not be marked refreshed")
 	}
 }
