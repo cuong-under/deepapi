@@ -61,13 +61,36 @@ func ExecuteStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.Requ
 	currentPayload := clonePayload(payload)
 	for {
 		allowAccountSwitch := opts.RetryEnabled && attempts >= retryMax && !accountSwitchAttempted && a != nil && a.UseConfigToken
-		allowSearchFallback := opts.RetryEnabled && attempts >= retryMax && opts.Request.Search && !searchFallbackAttempted
-		terminalWritten, retryable := hooks.ConsumeAttempt(currentResp, opts.RetryEnabled && (attempts < retryMax || allowSearchFallback || allowAccountSwitch))
+		allowSearchFallback := opts.Request.Search && !searchFallbackAttempted && (!opts.RetryEnabled || attempts >= retryMax)
+		terminalWritten, retryable := hooks.ConsumeAttempt(currentResp, (opts.RetryEnabled && (attempts < retryMax || allowAccountSwitch)) || allowSearchFallback)
 		if terminalWritten {
 			if hooks.OnTerminal != nil {
 				hooks.OnTerminal(attempts)
 			}
 			return
+		}
+		if allowSearchFallback && retryable {
+			fallback, fallbackErr := startPayloadCompletionWithoutSearch(ctx, ds, a, payload, opts, maxAttempts)
+			if fallbackErr != nil {
+				if hooks.OnRetryFailure != nil {
+					hooks.OnRetryFailure(fallbackErr.Status, fallbackErr.Message, fallbackErr.Code)
+				}
+				return
+			}
+			if fallback.Response != nil {
+				searchFallbackAttempted = true
+				config.Logger.Info("[completion_runtime_search_fallback] retrying without search after empty output", "surface", surface, "stream", opts.Stream)
+				currentResp = fallback.Response
+				currentPayload = fallback.Payload
+				pow = fallback.Pow
+				if hooks.OnSearchFallback != nil {
+					hooks.OnSearchFallback(fallback.SessionID)
+				}
+				if hooks.OnRetryPrompt != nil {
+					hooks.OnRetryPrompt(opts.UsagePrompt)
+				}
+				continue
+			}
 		}
 		if !retryable || !opts.RetryEnabled {
 			if hooks.Finalize != nil {
@@ -77,28 +100,6 @@ func ExecuteStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.Requ
 		}
 
 		if attempts >= retryMax {
-			if canRetryStreamWithoutSearch(opts.Request, &searchFallbackAttempted) {
-				fallback, fallbackErr := startPayloadCompletionWithoutSearch(ctx, ds, a, payload, opts, maxAttempts)
-				if fallbackErr != nil {
-					if hooks.OnRetryFailure != nil {
-						hooks.OnRetryFailure(fallbackErr.Status, fallbackErr.Message, fallbackErr.Code)
-					}
-					return
-				}
-				if fallback.Response != nil {
-					config.Logger.Info("[completion_runtime_search_fallback] retrying without search after empty output", "surface", surface, "stream", opts.Stream)
-					currentResp = fallback.Response
-					currentPayload = fallback.Payload
-					pow = fallback.Pow
-					if hooks.OnSearchFallback != nil {
-						hooks.OnSearchFallback(fallback.SessionID)
-					}
-					if hooks.OnRetryPrompt != nil {
-						hooks.OnRetryPrompt(opts.UsagePrompt)
-					}
-					continue
-				}
-			}
 			if canRetryOnAlternateAccount(ctx, a, &assistantturn.OutputError{Status: http.StatusTooManyRequests}, opts.RetryEnabled, &accountSwitchAttempted) {
 				switched, switchErr := startPayloadCompletionOnAlternateAccount(ctx, ds, a, payload, opts, maxAttempts)
 				if switchErr != nil {
@@ -169,14 +170,6 @@ func ExecuteStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.Requ
 		}
 		currentResp = nextResp
 	}
-}
-
-func canRetryStreamWithoutSearch(stdReq promptcompat.StandardRequest, attempted *bool) bool {
-	if attempted == nil || *attempted || !stdReq.Search {
-		return false
-	}
-	*attempted = true
-	return true
 }
 
 func startPayloadCompletionWithoutSearch(ctx context.Context, ds DeepSeekCaller, a *auth.RequestAuth, payload map[string]any, opts StreamRetryOptions, maxAttempts int) (StartResult, *assistantturn.OutputError) {

@@ -213,3 +213,49 @@ func TestExecuteStreamWithRetryFallsBackWithoutSearchAfterEmptySearchOutput(t *t
 		t.Fatalf("expected fallback to start fresh without parent message, got %#v", got)
 	}
 }
+
+func TestExecuteStreamWithRetryFallsBackWithoutSearchWhenEmptyRetryDisabled(t *testing.T) {
+	ds := &fakeDeepSeekCaller{responses: []*http.Response{
+		sseHTTPResponse(http.StatusOK, `data: {"response_message_id":79,"p":"response/content","v":"ok without search"}`),
+	}}
+	initial := sseHTTPResponse(http.StatusOK, `data: {"response_message_id":77,"p":"response/thinking_content","v":"search empty"}`)
+	payload := map[string]any{"prompt": "original prompt", "chat_session_id": "session-1", "search_enabled": true}
+	attemptsSeen := 0
+
+	ExecuteStreamWithRetry(context.Background(), ds, &auth.RequestAuth{}, initial, payload, "pow", StreamRetryOptions{
+		Surface:      "test.stream",
+		Stream:       true,
+		RetryEnabled: false,
+		UsagePrompt:  "original prompt",
+		Request: promptcompat.StandardRequest{
+			Search: true,
+		},
+	}, StreamRetryHooks{
+		ConsumeAttempt: func(resp *http.Response, allowDeferEmpty bool) (bool, bool) {
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					t.Fatalf("close failed: %v", err)
+				}
+			}()
+			body, _ := io.ReadAll(resp.Body)
+			attemptsSeen++
+			if strings.Contains(string(body), "ok without search") {
+				return true, false
+			}
+			if !allowDeferEmpty {
+				t.Fatalf("expected empty search output to be deferred for search fallback")
+			}
+			return false, true
+		},
+	})
+
+	if attemptsSeen != 2 {
+		t.Fatalf("expected two stream attempts, got %d", attemptsSeen)
+	}
+	if len(ds.payloads) != 1 {
+		t.Fatalf("expected one search fallback payload, got %d", len(ds.payloads))
+	}
+	if got := ds.payloads[0]["search_enabled"]; got != false {
+		t.Fatalf("expected fallback to disable search, got %#v", got)
+	}
+}
