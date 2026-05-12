@@ -396,8 +396,7 @@ func (h *Handler) aggregateStats(
 			"pricing_models_count", len(h.pricing.Models))
 
 		if entryPromptTokens > 0 && h.pricing.Models != nil {
-			modelKey := strings.ToLower(item.Model)
-			if pricing, ok := h.pricing.Models[modelKey]; ok {
+			if pricing, modelKey, ok := h.lookupModelPrice(item.Model); ok {
 				inputCost := float64(entryPromptTokens) / 1_000_000 * pricing.InputPricePer1M
 				outputCost := float64(entryCompletionTokens) / 1_000_000 * pricing.OutputPricePer1M
 				entryCost := inputCost + outputCost
@@ -412,8 +411,7 @@ func (h *Handler) aggregateStats(
 					"accumulated_cost", stat.TotalCost)
 			} else {
 				config.Logger.Warn("[analytics] no pricing for model",
-					"model", item.Model,
-					"model_key", modelKey)
+					"model", item.Model)
 			}
 		}
 	}
@@ -501,6 +499,25 @@ func callerTokenIDForAnalytics(token string) string {
 	}
 	sum := sha256.Sum256([]byte(token))
 	return "caller:" + hex.EncodeToString(sum[:8])
+}
+
+func (h *Handler) lookupModelPrice(model string) (config.ModelPrice, string, bool) {
+	if h == nil || h.pricing.Models == nil {
+		return config.ModelPrice{}, "", false
+	}
+	modelKey := strings.ToLower(strings.TrimSpace(model))
+	if modelKey == "" {
+		return config.ModelPrice{}, "", false
+	}
+	if pricing, ok := h.pricing.Models[modelKey]; ok {
+		return pricing, modelKey, true
+	}
+	if baseKey := strings.TrimSuffix(modelKey, "-search"); baseKey != modelKey {
+		if pricing, ok := h.pricing.Models[baseKey]; ok {
+			return pricing, baseKey, true
+		}
+	}
+	return config.ModelPrice{}, modelKey, false
 }
 
 func usageInt64(usage map[string]any, keys ...string) int64 {

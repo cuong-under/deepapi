@@ -8,6 +8,7 @@ import (
 
 	"ds2api/internal/auth"
 	"ds2api/internal/chathistory"
+	"ds2api/internal/config"
 	"ds2api/internal/database"
 )
 
@@ -183,6 +184,58 @@ func TestAggregateStatsCountsInputOutputUsageAliases(t *testing.T) {
 	}
 	if stats[0].PromptTokens != 13 || stats[0].CompletionTokens != 5 || stats[0].TotalTokens != 18 {
 		t.Fatalf("bad input/output usage aggregate: %#v", stats[0])
+	}
+}
+
+func TestAggregateStatsUsesBasePricingForSearchModel(t *testing.T) {
+	store := chathistory.New(filepath.Join(t.TempDir(), "history.json"))
+	h := &Handler{
+		ChatHistory: store,
+		pricing: config.PricingConfig{
+			Currency: "USD",
+			Models: map[string]config.ModelPrice{
+				"deepseek-v4-flash": {
+					InputPricePer1M:  0.14,
+					OutputPricePer1M: 0.28,
+				},
+			},
+		},
+	}
+
+	entry, err := store.Start(chathistory.StartParams{
+		CallerID:  "caller:test",
+		AccountID: "account",
+		UserID:    1,
+		Model:     "deepseek-v4-flash-search",
+		UserInput: "hello",
+	})
+	if err != nil {
+		t.Fatalf("start history entry: %v", err)
+	}
+	entry, err = store.Update(entry.ID, chathistory.UpdateParams{
+		Status: "success",
+		Usage: map[string]any{
+			"prompt_tokens":     int64(1_000_000),
+			"completion_tokens": int64(1_000_000),
+			"total_tokens":      int64(2_000_000),
+		},
+		Completed: true,
+	})
+	if err != nil {
+		t.Fatalf("update history entry: %v", err)
+	}
+
+	file, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	day := time.UnixMilli(entry.CreatedAt).UTC().Format("2006-01-02")
+	stats := h.aggregateStats(file.Items, day, day, "", "", "", "")
+	if len(stats) != 1 {
+		t.Fatalf("expected one aggregate, got %d: %#v", len(stats), stats)
+	}
+	if stats[0].TotalCost < 0.4199 || stats[0].TotalCost > 0.4201 {
+		t.Fatalf("expected base flash search cost 0.42, got %#v", stats[0])
 	}
 }
 
