@@ -18,7 +18,28 @@ const (
 	currentToolsFilename    = promptcompat.CurrentToolsContextFilename
 	currentInputContentType = "text/plain; charset=utf-8"
 	currentInputPurpose     = "assistants"
+
+	inlineUploadFallbackMaxChars = 20000
 )
+
+type CurrentInputUploadTooLargeError struct {
+	Chars int
+	Cause error
+}
+
+func (e *CurrentInputUploadTooLargeError) Error() string {
+	if e == nil {
+		return "current input file upload failed and context is too large to send inline"
+	}
+	return fmt.Sprintf("current input file upload failed and context is too large to send inline (%d chars); lower current_input_file.min_chars or retry after DeepSeek file upload is available", e.Chars)
+}
+
+func (e *CurrentInputUploadTooLargeError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
 
 type CurrentInputConfigReader interface {
 	CurrentInputFileEnabled() bool
@@ -65,6 +86,11 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 	}, 3)
 	if err != nil {
 		if shouldFallbackCurrentInputUpload(err) {
+			fileChars := len([]rune(fileText))
+			if fileChars > inlineUploadFallbackMaxChars {
+				config.Logger.Warn("[current_input_file] upload failed; context too large for inline fallback", "chars", fileChars, "error", err)
+				return stdReq, &CurrentInputUploadTooLargeError{Chars: fileChars, Cause: err}
+			}
 			config.Logger.Warn("[current_input_file] upload failed; falling back to inline prompt", "error", err)
 			return stdReq, nil
 		}
@@ -86,6 +112,11 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 		}, 3)
 		if err != nil {
 			if shouldFallbackCurrentInputUpload(err) {
+				totalChars := len([]rune(fileText + "\n" + toolsText))
+				if totalChars > inlineUploadFallbackMaxChars {
+					config.Logger.Warn("[current_input_file] tools upload failed; context too large for inline fallback", "chars", totalChars, "error", err)
+					return stdReq, &CurrentInputUploadTooLargeError{Chars: totalChars, Cause: err}
+				}
 				config.Logger.Warn("[current_input_file] tools upload failed; falling back to inline prompt", "error", err)
 				return stdReq, nil
 			}

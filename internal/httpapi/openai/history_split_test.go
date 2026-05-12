@@ -763,6 +763,40 @@ func TestChatCompletionsCurrentInputFileUploadFailureFallsBackToInlinePrompt(t *
 	}
 }
 
+func TestChatCompletionsCurrentInputFileUploadFailureRejectsLargeInlineFallback(t *testing.T) {
+	ds := &inlineUploadDSStub{uploadErr: errors.New("boom")}
+	h := &openAITestSurface{
+		Store: mockOpenAIConfig{
+			currentInputEnabled: true,
+		},
+		Auth: streamStatusAuthStub{},
+		DS:   ds,
+	}
+	reqBody, _ := json.Marshal(map[string]any{
+		"model": "deepseek-v4-flash",
+		"messages": []any{
+			map[string]any{"role": "user", "content": strings.Repeat("large context ", 2500)},
+		},
+		"stream": false,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(string(reqBody)))
+	req.Header.Set("Authorization", "Bearer direct-token")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	h.ChatCompletions(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "too large to send inline") {
+		t.Fatalf("expected clear large fallback error, got %s", rec.Body.String())
+	}
+	if ds.completionReq != nil {
+		t.Fatalf("expected no upstream completion call when large fallback is unsafe")
+	}
+}
+
 func TestCurrentInputFileWorksAcrossAutoDeleteModes(t *testing.T) {
 	for _, mode := range []string{"none", "single", "all"} {
 		t.Run(mode, func(t *testing.T) {
