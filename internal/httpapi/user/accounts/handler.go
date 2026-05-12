@@ -339,6 +339,11 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[RefreshToken] attempting login for account: email=%s, mobile=%s", account.Email, account.Mobile)
+	markFailed := func() {
+		if err := h.db.ClearAccountRefreshTime(accountID); err != nil {
+			log.Printf("[RefreshToken] failed to clear refresh time: %v", err)
+		}
+	}
 
 	// Test login to verify credentials and get new token
 	configAccount := config.Account{
@@ -352,6 +357,7 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	token, err := h.ds.Login(ctx, configAccount)
 	if err != nil {
 		log.Printf("[RefreshToken] login failed: %v", err)
+		markFailed()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -362,6 +368,7 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.deepSeekHealthCheck(ctx, configAccount, token); err != nil {
 		log.Printf("[RefreshToken] health check failed: %v", err)
+		markFailed()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,

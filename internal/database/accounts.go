@@ -246,3 +246,16 @@ func (db *DB) UpdateAccountRefreshTime(id int64) error {
 	}
 	return nil
 }
+
+// ClearAccountRefreshTime clears the last_refreshed_at timestamp for an account.
+func (db *DB) ClearAccountRefreshTime(id int64) error {
+	_, err := db.Exec(`
+		UPDATE user_accounts
+		SET last_refreshed_at = NULL
+		WHERE id = ?
+	`, id)
+	if err != nil {
+		return fmt.Errorf("clear refresh time: %w", err)
+	}
+	return nil
+}

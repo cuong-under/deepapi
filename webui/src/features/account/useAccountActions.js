@@ -423,7 +423,18 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
             setBatchProgress({ current: i + 1, total: allAccounts.length, results: [...results] })
         }
 
-        onMessage('success', t('accountManager.testAllCompleted', { success: successCount, total: allAccounts.length }))
+        const failedResults = results.filter(item => !item.success)
+        const summary = t('accountManager.testAllCompleted', { success: successCount, total: allAccounts.length })
+        if (failedResults.length > 0) {
+            const detail = failedResults
+                .slice(0, 3)
+                .map(item => `${item.id}: ${item.message || t('messages.requestFailed')}`)
+                .join(' | ')
+            const suffix = failedResults.length > 3 ? ` | +${failedResults.length - 3}` : ''
+            onMessage('error', `${summary}. ${detail}${suffix}`)
+        } else {
+            onMessage('success', summary)
+        }
         fetchAccounts()
         onRefresh()
         setTestingAll(false)

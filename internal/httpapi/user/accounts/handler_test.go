@@ -176,6 +176,9 @@ func TestRefreshTokenChecksDeepSeekAccountStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
+	if err := db.UpdateAccountRefreshTime(account.ID); err != nil {
+		t.Fatalf("seed refresh time: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/user/accounts/1/refresh-token", nil)
 	req = req.WithContext(withUser(req.Context(), user.ID, user.Username, user.Role))
