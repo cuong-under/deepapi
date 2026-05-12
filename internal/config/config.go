@@ -35,6 +35,11 @@ type Account struct {
 	Password string `json:"password,omitempty"`
 	Token    string `json:"token,omitempty"`
 	ProxyID  string `json:"proxy_id,omitempty"`
+	Enabled  *bool  `json:"enabled,omitempty"`
+}
+
+func (a Account) IsEnabled() bool {
+	return a.Enabled == nil || *a.Enabled
 }
 
 type APIKey struct {

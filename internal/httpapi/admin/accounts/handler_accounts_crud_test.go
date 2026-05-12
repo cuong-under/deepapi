@@ -116,3 +116,28 @@ func TestListAccountsMasksTokenPreview(t *testing.T) {
 		t.Fatalf("expected masked token preview, got %q", got)
 	}
 }
+
+func TestUpdateAccountEnabledPersistsAndResetsPool(t *testing.T) {
+	h := newAdminTestHandler(t, `{
+		"accounts":[{"email":"u@example.com","password":"secret","token":"tok"}]
+	}`)
+
+	body := []byte(`{"enabled":false}`)
+	req := httptest.NewRequest(http.MethodPut, "/admin/accounts/u@example.com", strings.NewReader(string(body)))
+	rec := httptest.NewRecorder()
+	r := chi.NewRouter()
+	r.Put("/admin/accounts/{identifier}", h.updateAccount)
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+	snap := h.Store.Snapshot()
+	if len(snap.Accounts) != 1 || snap.Accounts[0].IsEnabled() {
+		t.Fatalf("expected disabled account persisted: %#v", snap.Accounts)
+	}
+	status := h.Pool.Status()
+	if got, ok := status["total"].(int); !ok || got != 0 {
+		t.Fatalf("disabled account should be removed from active pool, got total=%#v", status["total"])
+	}
+}

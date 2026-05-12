@@ -135,6 +135,12 @@ func (db *DB) migrate() error {
 				ALTER TABLE user_accounts ADD COLUMN last_refreshed_at INTEGER;
 			`,
 		},
+		{
+			version: 3,
+			sql: `
+				ALTER TABLE user_accounts ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;
+			`,
+		},
 	}
 
 	for _, m := range migrations {

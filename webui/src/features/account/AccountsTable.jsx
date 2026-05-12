@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Check, Copy, Pencil, Play, Plus, Trash2, FolderX } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Copy, Pencil, Play, Plus, Trash2, FolderX, Power } from 'lucide-react'
 import clsx from 'clsx'
 
 export default function AccountsTable({
@@ -12,6 +12,7 @@ export default function AccountsTable({
     sessionCounts,
     deletingSessions,
     updatingProxy,
+    togglingAccount,
     totalAccounts,
     page,
     pageSize,
@@ -25,6 +26,7 @@ export default function AccountsTable({
     onDeleteAccount,
     onDeleteAllSessions,
     onUpdateAccountProxy,
+    onToggleAccountEnabled,
     onPrevPage,
     onNextPage,
     onPageSizeChange,
@@ -97,13 +99,15 @@ export default function AccountsTable({
                         const id = resolveAccountIdentifier(acc)
                         const assignedProxy = proxies.find(proxy => proxy.id === acc.proxy_id)
                         const runtimeUnknown = envBacked && !acc.test_status
+                        const isEnabled = acc.enabled !== false
                         // Check if account has been refreshed (has last_refreshed_at timestamp)
-                        const isActive = acc.last_refreshed_at != null
+                        const isActive = isEnabled && acc.last_refreshed_at != null
                         return (
                             <div key={i} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/50 transition-colors">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className={clsx(
                                         "w-2 h-2 rounded-full shrink-0",
+                                        !isEnabled ? "bg-slate-500" :
                                         acc.test_status === 'failed' ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
                                         isActive ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
                                         runtimeUnknown ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-amber-500"
@@ -125,7 +129,9 @@ export default function AccountsTable({
                                         )}
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                                             <span>
-                                                {acc.test_status === 'failed'
+                                                {!isEnabled
+                                                    ? t('accountManager.disabled')
+                                                    : acc.test_status === 'failed'
                                                     ? t('accountManager.testStatusFailed')
                                                     : isActive
                                                         ? t('accountManager.refreshed')
@@ -161,6 +167,11 @@ export default function AccountsTable({
                                                     {t('accountManager.proxyBadge', { name: assignedProxy ? (assignedProxy.name || `${assignedProxy.host}:${assignedProxy.port}`) : acc.proxy_id })}
                                                 </span>
                                             )}
+                                            {!isEnabled && (
+                                                <span className="font-mono bg-slate-500/10 text-slate-400 px-1.5 py-0.5 rounded text-[10px]">
+                                                    {t('accountManager.skippedByPool')}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -180,6 +191,19 @@ export default function AccountsTable({
                                             ))}
                                         </select>
                                     )}
+                                    <button
+                                        onClick={() => onToggleAccountEnabled(acc, !isEnabled)}
+                                        disabled={!id || togglingAccount?.[id]}
+                                        className={clsx(
+                                            "p-1 lg:p-1.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                                            isEnabled
+                                                ? "text-emerald-500 hover:bg-emerald-500/10"
+                                                : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10"
+                                        )}
+                                        title={isEnabled ? t('accountManager.disableAccountTitle') : t('accountManager.enableAccountTitle')}
+                                    >
+                                        {togglingAccount?.[id] ? <span className="text-xs animate-spin">⟳</span> : <Power className="w-3.5 h-3.5 lg:w-4 lg:h-4" />}
+                                    </button>
                                     <button
                                         onClick={() => onEditAccount(acc)}
                                         disabled={!id}

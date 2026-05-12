@@ -51,6 +51,15 @@ func FieldString(m map[string]any, key string) string {
 func FieldStringOptional(m map[string]any, key string) (string, bool) {
 	return fieldStringOptional(m, key)
 }
+
+func FieldBoolOptional(m map[string]any, key string) (bool, bool) {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return false, false
+	}
+	b, ok := v.(bool)
+	return b, ok
+}
 func StatusOr(v int, d int) int { return statusOr(v, d) }
 func AccountMatchesIdentifier(acc config.Account, identifier string) bool {
 	return accountMatchesIdentifier(acc, identifier)
@@ -161,7 +170,7 @@ func toStringSlice(v any) ([]string, bool) {
 func toAccount(m map[string]any) config.Account {
 	email := fieldString(m, "email")
 	mobile := config.NormalizeMobileForStorage(fieldString(m, "mobile"))
-	return config.Account{
+	acc := config.Account{
 		Name:     fieldString(m, "name"),
 		Remark:   fieldString(m, "remark"),
 		Email:    email,
@@ -169,6 +178,10 @@ func toAccount(m map[string]any) config.Account {
 		Password: fieldString(m, "password"),
 		ProxyID:  fieldString(m, "proxy_id"),
 	}
+	if enabled, ok := FieldBoolOptional(m, "enabled"); ok {
+		acc.Enabled = &enabled
+	}
+	return acc
 }
 
 func toAPIKeys(v any) ([]config.APIKey, bool) {

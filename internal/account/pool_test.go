@@ -236,6 +236,34 @@ func TestPoolAcquireRotatesIntoTokenlessAccounts(t *testing.T) {
 	}
 }
 
+func TestPoolSkipsDisabledAccounts(t *testing.T) {
+	t.Setenv("DS2API_ACCOUNT_MAX_INFLIGHT", "1")
+	t.Setenv("DS2API_ACCOUNT_MAX_QUEUE", "")
+	t.Setenv("DS2API_CONFIG_JSON", `{
+		"keys":["k1"],
+		"accounts":[
+			{"email":"disabled@example.com","token":"token1","enabled":false},
+			{"email":"enabled@example.com","token":"token2"}
+		]
+	}`)
+
+	pool := NewPool(config.LoadStore())
+	if _, ok := pool.Acquire("disabled@example.com", nil); ok {
+		t.Fatalf("expected disabled target acquire to fail")
+	}
+	acc, ok := pool.Acquire("", nil)
+	if !ok {
+		t.Fatalf("expected enabled account acquire")
+	}
+	if got := acc.Identifier(); got != "enabled@example.com" {
+		t.Fatalf("unexpected acquired account: %q", got)
+	}
+	status := pool.Status()
+	if got, ok := status["total"].(int); !ok || got != 1 {
+		t.Fatalf("expected total enabled pool size 1, got %#v", status["total"])
+	}
+}
+
 func TestPoolAcquireWaitQueuesAndSucceedsAfterRelease(t *testing.T) {
 	pool := newSingleAccountPoolForTest(t, "1")
 	first, ok := pool.Acquire("", nil)

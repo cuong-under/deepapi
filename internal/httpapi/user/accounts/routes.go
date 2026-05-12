@@ -10,6 +10,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/accounts", h.CreateAccount)
 	r.Get("/accounts/{id}", h.GetAccount)
 	r.Put("/accounts/{id}", h.UpdateAccount)
+	r.Put("/accounts/{id}/enabled", h.SetAccountEnabled)
 	r.Delete("/accounts/{id}", h.DeleteAccount)
 	r.Post("/accounts/{id}/refresh-token", h.RefreshToken)
 }

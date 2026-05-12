@@ -128,12 +128,13 @@ func (r *MultiUserResolver) acquireManagedRequestAuthFromDB(ctx context.Context,
 		return nil, err
 	}
 
-	if len(accounts) == 0 {
+	enabledAccounts := enabledUserAccounts(accounts)
+	if len(enabledAccounts) == 0 {
 		r.logger.Warn("[MultiUserResolver] User has no accounts", "user_id", userID)
 		return nil, ErrNoUserAccount
 	}
 
-	r.logger.Info("[MultiUserResolver] Found user accounts", "user_id", userID, "count", len(accounts))
+	r.logger.Info("[MultiUserResolver] Found user accounts", "user_id", userID, "count", len(accounts), "enabled_count", len(enabledAccounts))
 
 	// IMPORTANT: Set user context in request so chat history can capture user_id
 	// This ensures analytics can filter by user_id
@@ -154,6 +155,10 @@ func (r *MultiUserResolver) acquireManagedRequestAuthFromDB(ctx context.Context,
 		// User specified target account
 		for _, acc := range accounts {
 			if acc.Email == target || acc.Mobile == target {
+				if !acc.Enabled {
+					r.logger.Warn("[MultiUserResolver] Target account disabled", "target", target)
+					return nil, errors.New("target account disabled")
+				}
 				candidates = []*database.UserAccount{acc}
 				break
 			}
@@ -163,7 +168,7 @@ func (r *MultiUserResolver) acquireManagedRequestAuthFromDB(ctx context.Context,
 			return nil, errors.New("target account not found")
 		}
 	} else {
-		candidates = r.roundRobinCandidates(userID, accounts)
+		candidates = r.roundRobinCandidates(userID, enabledAccounts)
 	}
 
 	var lastErr error
@@ -210,6 +215,16 @@ func (r *MultiUserResolver) acquireManagedRequestAuthFromDB(ctx context.Context,
 		return nil, lastErr
 	}
 	return nil, ErrNoUserAccount
+}
+
+func enabledUserAccounts(accounts []*database.UserAccount) []*database.UserAccount {
+	enabled := make([]*database.UserAccount, 0, len(accounts))
+	for _, acc := range accounts {
+		if acc.Enabled {
+			enabled = append(enabled, acc)
+		}
+	}
+	return enabled
 }
 
 func (r *MultiUserResolver) roundRobinCandidates(userID int64, accounts []*database.UserAccount) []*database.UserAccount {

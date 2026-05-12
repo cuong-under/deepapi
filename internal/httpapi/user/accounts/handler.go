@@ -77,6 +77,7 @@ type AccountResponse struct {
 	Email           string `json:"email"`
 	Mobile          string `json:"mobile"`
 	ProxyID         string `json:"proxy_id"`
+	Enabled         bool   `json:"enabled"`
 	CreatedAt       int64  `json:"created_at"`
 	LastRefreshedAt *int64 `json:"last_refreshed_at,omitempty"`
 	HasPassword     bool   `json:"has_password"`
@@ -91,10 +92,48 @@ func accountResponse(account *database.UserAccount) AccountResponse {
 		Email:           account.Email,
 		Mobile:          account.Mobile,
 		ProxyID:         account.ProxyID,
+		Enabled:         account.Enabled,
 		CreatedAt:       account.CreatedAt,
 		LastRefreshedAt: account.LastRefreshedAt,
 		HasPassword:     account.Password != "",
 	}
+}
+
+func (h *Handler) SetAccountEnabled(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, `{"error":"user not authenticated"}`, http.StatusUnauthorized)
+		return
+	}
+
+	accountID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, `{"error":"invalid account id"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := h.db.SetAccountEnabled(accountID, userID, req.Enabled); err != nil {
+		if err.Error() == "account not found or access denied" {
+			http.Error(w, `{"error":"account not found or access denied"}`, http.StatusForbidden)
+			return
+		}
+		http.Error(w, `{"error":"failed to update account status"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"enabled": req.Enabled,
+	})
 }
 
 func accountResponses(accounts []*database.UserAccount) []AccountResponse {
@@ -335,6 +374,15 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	if account.UserID != userID {
 		log.Printf("[RefreshToken] access denied: account.UserID=%d, userID=%d", account.UserID, userID)
 		http.Error(w, `{"error":"access denied"}`, http.StatusForbidden)
+		return
+	}
+	if !account.Enabled {
+		log.Printf("[RefreshToken] account disabled: account_id=%d", accountID)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Account is disabled",
+		})
 		return
 	}
 

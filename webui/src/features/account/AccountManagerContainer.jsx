@@ -86,12 +86,14 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         sessionCounts,
         deletingSessions,
         updatingProxy,
+        togglingAccount,
         addKey,
         deleteKey,
         addAccount,
         updateAccount,
         deleteAccount,
         testAccount,
+        toggleAccountEnabled,
         testAllAccounts,
         deleteAllSessions,
         updateAccountProxy,
@@ -104,6 +106,7 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
             loadKeys() // Reload keys after any action
         },
         config,
+        accounts,
         fetchAccounts,
         resolveAccountIdentifier,
     })
@@ -165,6 +168,7 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 sessionCounts={sessionCounts}
                 deletingSessions={deletingSessions}
                 updatingProxy={updatingProxy}
+                togglingAccount={togglingAccount}
                 totalAccounts={totalAccounts}
                 page={page}
                 pageSize={pageSize}
@@ -175,6 +179,7 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 onShowAddAccount={openAddAccount}
                 onEditAccount={openEditAccount}
                 onTestAccount={testAccount}
+                onToggleAccountEnabled={toggleAccountEnabled}
                 onDeleteAccount={deleteAccount}
                 onDeleteAllSessions={deleteAllSessions}
                 onUpdateAccountProxy={updateAccountProxy}

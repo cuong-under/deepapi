@@ -16,6 +16,7 @@ type UserAccount struct {
 	Mobile          string `json:"mobile"`
 	Password        string `json:"password"`
 	ProxyID         string `json:"proxy_id"`
+	Enabled         bool   `json:"enabled"`
 	CreatedAt       int64  `json:"created_at"`
 	LastRefreshedAt *int64 `json:"last_refreshed_at,omitempty"`
 }
@@ -30,8 +31,8 @@ type UserAccountListOptions struct {
 func (db *DB) CreateAccount(userID int64, name, remark, email, mobile, password, proxyID string) (*UserAccount, error) {
 	now := time.Now().Unix()
 	result, err := db.Exec(`
-		INSERT INTO user_accounts (user_id, name, remark, email, mobile, password, proxy_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO user_accounts (user_id, name, remark, email, mobile, password, proxy_id, enabled, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
 	`, userID, name, remark, email, mobile, password, proxyID, now)
 	if err != nil {
 		return nil, fmt.Errorf("insert account: %w", err)
@@ -51,6 +52,7 @@ func (db *DB) CreateAccount(userID int64, name, remark, email, mobile, password,
 		Mobile:    mobile,
 		Password:  password,
 		ProxyID:   proxyID,
+		Enabled:   true,
 		CreatedAt: now,
 	}, nil
 }
@@ -58,7 +60,7 @@ func (db *DB) CreateAccount(userID int64, name, remark, email, mobile, password,
 // GetAccountsByUserID gets all accounts for a user
 func (db *DB) GetAccountsByUserID(userID int64) ([]*UserAccount, error) {
 	rows, err := db.Query(`
-		SELECT id, user_id, name, remark, email, mobile, password, proxy_id, created_at, last_refreshed_at
+		SELECT id, user_id, name, remark, email, mobile, password, proxy_id, enabled, created_at, last_refreshed_at
 		FROM user_accounts
 		WHERE user_id = ?
 		ORDER BY created_at DESC
@@ -71,7 +73,7 @@ func (db *DB) GetAccountsByUserID(userID int64) ([]*UserAccount, error) {
 	var accounts []*UserAccount
 	for rows.Next() {
 		var a UserAccount
-		if err := rows.Scan(&a.ID, &a.UserID, &a.Name, &a.Remark, &a.Email, &a.Mobile, &a.Password, &a.ProxyID, &a.CreatedAt, &a.LastRefreshedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.UserID, &a.Name, &a.Remark, &a.Email, &a.Mobile, &a.Password, &a.ProxyID, &a.Enabled, &a.CreatedAt, &a.LastRefreshedAt); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
 		}
 		accounts = append(accounts, &a)
@@ -104,7 +106,7 @@ func (db *DB) ListAccountsByUserID(userID int64, opts UserAccountListOptions) ([
 	queryArgs := append([]interface{}{}, args...)
 	queryArgs = append(queryArgs, opts.Limit, opts.Offset)
 	rows, err := db.Query(`
-		SELECT id, user_id, name, remark, email, mobile, password, proxy_id, created_at, last_refreshed_at
+		SELECT id, user_id, name, remark, email, mobile, password, proxy_id, enabled, created_at, last_refreshed_at
 		FROM user_accounts`+where+`
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
@@ -117,7 +119,7 @@ func (db *DB) ListAccountsByUserID(userID int64, opts UserAccountListOptions) ([
 	var accounts []*UserAccount
 	for rows.Next() {
 		var a UserAccount
-		if err := rows.Scan(&a.ID, &a.UserID, &a.Name, &a.Remark, &a.Email, &a.Mobile, &a.Password, &a.ProxyID, &a.CreatedAt, &a.LastRefreshedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.UserID, &a.Name, &a.Remark, &a.Email, &a.Mobile, &a.Password, &a.ProxyID, &a.Enabled, &a.CreatedAt, &a.LastRefreshedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan account: %w", err)
 		}
 		accounts = append(accounts, &a)
@@ -147,9 +149,9 @@ func buildUserAccountListWhere(userID int64, search string) (string, []interface
 func (db *DB) GetAccountByID(id int64) (*UserAccount, error) {
 	var a UserAccount
 	err := db.QueryRow(`
-		SELECT id, user_id, name, remark, email, mobile, password, proxy_id, created_at, last_refreshed_at
+		SELECT id, user_id, name, remark, email, mobile, password, proxy_id, enabled, created_at, last_refreshed_at
 		FROM user_accounts WHERE id = ?
-	`, id).Scan(&a.ID, &a.UserID, &a.Name, &a.Remark, &a.Email, &a.Mobile, &a.Password, &a.ProxyID, &a.CreatedAt, &a.LastRefreshedAt)
+	`, id).Scan(&a.ID, &a.UserID, &a.Name, &a.Remark, &a.Email, &a.Mobile, &a.Password, &a.ProxyID, &a.Enabled, &a.CreatedAt, &a.LastRefreshedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("account not found")
 	}
@@ -157,6 +159,25 @@ func (db *DB) GetAccountByID(id int64) (*UserAccount, error) {
 		return nil, fmt.Errorf("query account: %w", err)
 	}
 	return &a, nil
+}
+
+func (db *DB) SetAccountEnabled(id, userID int64, enabled bool) error {
+	result, err := db.Exec(`
+		UPDATE user_accounts
+		SET enabled = ?
+		WHERE id = ? AND user_id = ?
+	`, enabled, id, userID)
+	if err != nil {
+		return fmt.Errorf("set account enabled: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("account not found or access denied")
+	}
+	return nil
 }
 
 // UpdateAccount updates an account (with ownership check)
@@ -202,7 +223,7 @@ func (db *DB) DeleteAccount(id, userID int64) error {
 // GetAllAccounts gets all accounts (admin only)
 func (db *DB) GetAllAccounts() ([]*UserAccount, error) {
 	rows, err := db.Query(`
-		SELECT id, user_id, name, remark, email, mobile, password, proxy_id, created_at, last_refreshed_at
+		SELECT id, user_id, name, remark, email, mobile, password, proxy_id, enabled, created_at, last_refreshed_at
 		FROM user_accounts
 		ORDER BY created_at DESC
 	`)
@@ -214,7 +235,7 @@ func (db *DB) GetAllAccounts() ([]*UserAccount, error) {
 	var accounts []*UserAccount
 	for rows.Next() {
 		var a UserAccount
-		if err := rows.Scan(&a.ID, &a.UserID, &a.Name, &a.Remark, &a.Email, &a.Mobile, &a.Password, &a.ProxyID, &a.CreatedAt, &a.LastRefreshedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.UserID, &a.Name, &a.Remark, &a.Email, &a.Mobile, &a.Password, &a.ProxyID, &a.Enabled, &a.CreatedAt, &a.LastRefreshedAt); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
 		}
 		accounts = append(accounts, &a)

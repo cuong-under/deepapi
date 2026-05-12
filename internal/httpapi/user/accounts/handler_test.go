@@ -81,6 +81,9 @@ func TestListAccountsMasksPasswordAndScopesAdminToSelf(t *testing.T) {
 	if !payload.Accounts[0].HasPassword {
 		t.Fatalf("expected has_password=true")
 	}
+	if !payload.Accounts[0].Enabled {
+		t.Fatalf("expected enabled=true")
+	}
 }
 
 func TestListAccountsSupportsSearchAndPagination(t *testing.T) {
@@ -204,5 +207,51 @@ func TestRefreshTokenChecksDeepSeekAccountStatus(t *testing.T) {
 	}
 	if updated.LastRefreshedAt != nil {
 		t.Fatalf("muted account should not be marked refreshed")
+	}
+}
+
+func TestSetAccountEnabledScopesToOwner(t *testing.T) {
+	db := openTestDB(t)
+	user, err := db.CreateUser("user", "user@example.com", "password123", "user")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	other, err := db.CreateUser("other", "other@example.com", "password123", "user")
+	if err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+	account, err := db.CreateAccount(user.ID, "main", "", "main@example.com", "", "secret", "")
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/api/user/accounts/1/enabled", strings.NewReader(`{"enabled":false}`))
+	req = req.WithContext(withUser(req.Context(), other.ID, other.Username, other.Role))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("id", strconv.FormatInt(account.ID, 10))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+	rec := httptest.NewRecorder()
+	NewHandler(db, nil).SetAccountEnabled(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden, got status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/user/accounts/1/enabled", strings.NewReader(`{"enabled":false}`))
+	req = req.WithContext(withUser(req.Context(), user.ID, user.Username, user.Role))
+	routeCtx = chi.NewRouteContext()
+	routeCtx.URLParams.Add("id", strconv.FormatInt(account.ID, 10))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+	rec = httptest.NewRecorder()
+	NewHandler(db, nil).SetAccountEnabled(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected ok, got status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	updated, err := db.GetAccountByID(account.ID)
+	if err != nil {
+		t.Fatalf("get account: %v", err)
+	}
+	if updated.Enabled {
+		t.Fatalf("expected account disabled")
 	}
 }

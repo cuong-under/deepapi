@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMultiUserAccounts } from './useMultiUserAccounts'
 
-export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, fetchAccounts, resolveAccountIdentifier }) {
+export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, accounts = [], fetchAccounts, resolveAccountIdentifier }) {
     const [showAddKey, setShowAddKey] = useState(false)
     const [editingKey, setEditingKey] = useState(null)
     const [showAddAccount, setShowAddAccount] = useState(false)
@@ -18,6 +18,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
     const [sessionCounts, setSessionCounts] = useState({})
     const [deletingSessions, setDeletingSessions] = useState({})
     const [updatingProxy, setUpdatingProxy] = useState({})
+    const [togglingAccount, setTogglingAccount] = useState({})
 
     const {
         isMultiUser,
@@ -361,6 +362,46 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         return data.items || config.accounts || []
     }
 
+    const toggleAccountEnabled = async (account, enabled) => {
+        const accountID = String(resolveAccountIdentifier(account) || '').trim()
+        if (!accountID) {
+            onMessage('error', t('accountManager.invalidIdentifier'))
+            return
+        }
+        const confirmKey = enabled ? 'accountManager.enableAccountConfirm' : 'accountManager.disableAccountConfirm'
+        if (!confirm(t(confirmKey))) return
+
+        setTogglingAccount(prev => ({ ...prev, [accountID]: true }))
+        try {
+            let res
+            if (isMultiUser) {
+                res = await apiFetch(`/api/user/accounts/${encodeURIComponent(accountID)}/enabled`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled }),
+                })
+            } else {
+                res = await apiFetch(`/admin/accounts/${encodeURIComponent(accountID)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled }),
+                })
+            }
+            const data = await res.json()
+            if (!res.ok || data.success === false) {
+                onMessage('error', data.detail || data.error || t('messages.requestFailed'))
+                return
+            }
+            onMessage('success', enabled ? t('accountManager.enableAccountSuccess') : t('accountManager.disableAccountSuccess'))
+            fetchAccounts()
+            onRefresh()
+        } catch (e) {
+            onMessage('error', e.message || t('messages.networkError'))
+        } finally {
+            setTogglingAccount(prev => ({ ...prev, [accountID]: false }))
+        }
+    }
+
     const testAllAccounts = async () => {
         if (!confirm(t('accountManager.testAllConfirm'))) return
 
@@ -376,6 +417,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
             return
         }
 
+        allAccounts = allAccounts.filter(acc => acc.enabled !== false)
         if (allAccounts.length === 0) {
             setTestingAll(false)
             return
@@ -490,7 +532,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         try {
             let res
             if (isMultiUser) {
-                const existing = config?.accounts?.find(acc => String(acc.id || '') === accountID)
+                const existing = accounts.find(acc => String(acc.id || '') === accountID)
                 res = await apiFetch(`/api/user/accounts/${encodeURIComponent(accountID)}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -552,12 +594,14 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         sessionCounts,
         deletingSessions,
         updatingProxy,
+        togglingAccount,
         addKey,
         deleteKey,
         addAccount,
         updateAccount,
         deleteAccount,
         testAccount,
+        toggleAccountEnabled,
         testAllAccounts,
         deleteAllSessions,
         updateAccountProxy,

@@ -45,6 +45,9 @@ func (p *Pool) Reset() {
 	})
 	ids := make([]string, 0, len(accounts))
 	for _, a := range accounts {
+		if !a.IsEnabled() {
+			continue
+		}
 		id := a.Identifier()
 		if id != "" {
 			ids = append(ids, id)
@@ -120,7 +123,7 @@ func (p *Pool) Status() map[string]any {
 	return map[string]any{
 		"available":                len(available),
 		"in_use":                   inUseSlots,
-		"total":                    len(p.store.Accounts()),
+		"total":                    len(p.queue),
 		"available_accounts":       available,
 		"in_use_accounts":          inUseAccounts,
 		"max_inflight_per_account": p.maxInflightPerAccount,
