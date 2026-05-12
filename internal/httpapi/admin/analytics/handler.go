@@ -395,18 +395,24 @@ func (h *Handler) aggregateStats(
 			"has_pricing_models", h.pricing.Models != nil,
 			"pricing_models_count", len(h.pricing.Models))
 
-		if entryPromptTokens > 0 && h.pricing.Models != nil {
+		billablePromptTokens := entryPromptTokens
+		billableCompletionTokens := entryCompletionTokens
+		if billablePromptTokens == 0 && billableCompletionTokens == 0 && entryTotalTokens > 0 {
+			billablePromptTokens = entryTotalTokens
+		}
+
+		if (billablePromptTokens > 0 || billableCompletionTokens > 0) && h.pricing.Models != nil {
 			if pricing, modelKey, ok := h.lookupModelPrice(item.Model); ok {
-				inputCost := float64(entryPromptTokens) / 1_000_000 * pricing.InputPricePer1M
-				outputCost := float64(entryCompletionTokens) / 1_000_000 * pricing.OutputPricePer1M
+				inputCost := float64(billablePromptTokens) / 1_000_000 * pricing.InputPricePer1M
+				outputCost := float64(billableCompletionTokens) / 1_000_000 * pricing.OutputPricePer1M
 				entryCost := inputCost + outputCost
 				stat.TotalCost += entryCost
 				config.Logger.Info("[analytics] calculated entry cost",
 					"entry_id", item.ID,
 					"model", item.Model,
 					"model_key", modelKey,
-					"prompt_tokens", entryPromptTokens,
-					"completion_tokens", entryCompletionTokens,
+					"prompt_tokens", billablePromptTokens,
+					"completion_tokens", billableCompletionTokens,
 					"entry_cost", entryCost,
 					"accumulated_cost", stat.TotalCost)
 			} else {
