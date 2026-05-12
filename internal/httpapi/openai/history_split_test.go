@@ -737,7 +737,7 @@ func TestResponsesCurrentInputFileMapsDirectAuthFailureTo401(t *testing.T) {
 	}
 }
 
-func TestChatCompletionsCurrentInputFileUploadFailureReturnsInternalServerError(t *testing.T) {
+func TestChatCompletionsCurrentInputFileUploadFailureFallsBackToInlinePrompt(t *testing.T) {
 	ds := &inlineUploadDSStub{uploadErr: errors.New("boom")}
 	h := &openAITestSurface{
 		Store: mockOpenAIConfig{
@@ -758,8 +758,8 @@ func TestChatCompletionsCurrentInputFileUploadFailureReturnsInternalServerError(
 
 	h.ChatCompletions(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected fallback 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

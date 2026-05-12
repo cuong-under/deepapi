@@ -64,6 +64,10 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 		Data:        []byte(fileText),
 	}, 3)
 	if err != nil {
+		if shouldFallbackCurrentInputUpload(err) {
+			config.Logger.Warn("[current_input_file] upload failed; falling back to inline prompt", "error", err)
+			return stdReq, nil
+		}
 		return stdReq, fmt.Errorf("upload current user input file: %w", err)
 	}
 	fileID := strings.TrimSpace(result.ID)
@@ -81,6 +85,10 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 			Data:        []byte(toolsText),
 		}, 3)
 		if err != nil {
+			if shouldFallbackCurrentInputUpload(err) {
+				config.Logger.Warn("[current_input_file] tools upload failed; falling back to inline prompt", "error", err)
+				return stdReq, nil
+			}
 			return stdReq, fmt.Errorf("upload current tools file: %w", err)
 		}
 		toolFileID = strings.TrimSpace(result.ID)
@@ -112,6 +120,10 @@ func (s Service) ApplyCurrentInputFile(ctx context.Context, a *auth.RequestAuth,
 	tokenParts = append(tokenParts, stdReq.FinalPrompt)
 	stdReq.PromptTokenText = strings.Join(tokenParts, "\n")
 	return stdReq, nil
+}
+
+func shouldFallbackCurrentInputUpload(err error) bool {
+	return err != nil && !dsclient.IsManagedUnauthorizedError(err) && !dsclient.IsDirectUnauthorizedError(err)
 }
 
 func (s Service) ReuploadAppliedCurrentInputFile(ctx context.Context, a *auth.RequestAuth, stdReq promptcompat.StandardRequest) (promptcompat.StandardRequest, error) {
