@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMultiUserAccounts } from './useMultiUserAccounts'
 
-export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, accounts = [], fetchAccounts, resolveAccountIdentifier }) {
+export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, accounts = [], fetchAccounts, updateAccountInList, resolveAccountIdentifier }) {
     const [showAddKey, setShowAddKey] = useState(false)
     const [editingKey, setEditingKey] = useState(null)
     const [showAddAccount, setShowAddAccount] = useState(false)
@@ -400,6 +400,11 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, a
                 return
             }
             onMessage('success', enabled ? t('accountManager.enableAccountSuccess') : t('accountManager.disableAccountSuccess'))
+            updateAccountInList?.(accountID, {
+                enabled,
+                last_refreshed_at: enabled ? account?.last_refreshed_at : null,
+                test_status: enabled ? account?.test_status : '',
+            })
             fetchAccounts()
             onRefresh()
         } catch (e) {

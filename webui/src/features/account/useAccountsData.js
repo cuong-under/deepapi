@@ -71,6 +71,17 @@ export function useAccountsData({ apiFetch }) {
         fetchAccounts(1, pageSize, query)
     }
 
+    const updateAccountInList = (identifier, patch) => {
+        const targetID = String(identifier || '').trim()
+        if (!targetID) return
+        setAccounts(prev => prev.map(acc => {
+            const id = isMultiUser
+                ? String(acc.id || '')
+                : String(acc.identifier || acc.email || acc.mobile || '').trim()
+            return id === targetID ? { ...acc, ...patch } : acc
+        }))
+    }
+
     const fetchQueueStatus = async () => {
         try {
             const res = await apiFetch('/admin/queue/status')
@@ -106,6 +117,7 @@ export function useAccountsData({ apiFetch }) {
         totalAccounts,
         loadingAccounts,
         fetchAccounts,
+        updateAccountInList,
         changePageSize,
         resolveAccountIdentifier,
         searchQuery,
