@@ -255,3 +255,36 @@ func TestSetAccountEnabledScopesToOwner(t *testing.T) {
 		t.Fatalf("expected account disabled")
 	}
 }
+
+func TestUpdateAccountCanToggleEnabled(t *testing.T) {
+	db := openTestDB(t)
+	user, err := db.CreateUser("user", "user@example.com", "password123", "user")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	account, err := db.CreateAccount(user.ID, "main", "old", "main@example.com", "", "secret", "proxy-a")
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+
+	body := `{"name":"main","remark":"old","email":"main@example.com","mobile":"","proxy_id":"proxy-a","enabled":false}`
+	req := httptest.NewRequest(http.MethodPut, "/api/user/accounts/1", strings.NewReader(body))
+	req = req.WithContext(withUser(req.Context(), user.ID, user.Username, user.Role))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("id", strconv.FormatInt(account.ID, 10))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+	rec := httptest.NewRecorder()
+
+	NewHandler(db, nil).UpdateAccount(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected ok, got status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	updated, err := db.GetAccountByID(account.ID)
+	if err != nil {
+		t.Fatalf("get account: %v", err)
+	}
+	if updated.Enabled {
+		t.Fatalf("expected account disabled via update endpoint")
+	}
+}

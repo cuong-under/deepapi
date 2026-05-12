@@ -67,6 +67,7 @@ type UpdateAccountRequest struct {
 	Mobile   string `json:"mobile"`
 	Password string `json:"password"`
 	ProxyID  string `json:"proxy_id"`
+	Enabled  *bool  `json:"enabled"`
 }
 
 type AccountResponse struct {
@@ -294,6 +295,12 @@ func (h *Handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, `{"error":"failed to update account"}`, http.StatusInternalServerError)
 		return
+	}
+	if req.Enabled != nil {
+		if err := h.db.SetAccountEnabled(accountID, userID, *req.Enabled); err != nil {
+			http.Error(w, `{"error":"failed to update account status"}`, http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

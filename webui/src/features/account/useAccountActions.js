@@ -375,10 +375,17 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, a
         try {
             let res
             if (isMultiUser) {
-                res = await apiFetch(`/api/user/accounts/${encodeURIComponent(accountID)}/enabled`, {
+                res = await apiFetch(`/api/user/accounts/${encodeURIComponent(accountID)}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled }),
+                    body: JSON.stringify({
+                        name: account?.name || '',
+                        remark: account?.remark || '',
+                        email: account?.email || '',
+                        mobile: account?.mobile || '',
+                        proxy_id: account?.proxy_id || '',
+                        enabled,
+                    }),
                 })
             } else {
                 res = await apiFetch(`/admin/accounts/${encodeURIComponent(accountID)}`, {
@@ -387,7 +394,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, a
                     body: JSON.stringify({ enabled }),
                 })
             }
-            const data = await res.json()
+            const data = await readActionResponse(res)
             if (!res.ok || data.success === false) {
                 onMessage('error', data.detail || data.error || t('messages.requestFailed'))
                 return
@@ -605,5 +612,15 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, a
         testAllAccounts,
         deleteAllSessions,
         updateAccountProxy,
+    }
+}
+
+async function readActionResponse(res) {
+    const text = await res.text()
+    if (!text.trim()) return {}
+    try {
+        return JSON.parse(text)
+    } catch (_err) {
+        return { error: text.trim() }
     }
 }
