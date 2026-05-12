@@ -289,6 +289,47 @@ func TestAggregateStatsBillsTotalOnlyUsageAsInputTokens(t *testing.T) {
 	}
 }
 
+func TestAggregateStatsUsesDefaultPricingWhenConfigMissing(t *testing.T) {
+	store := chathistory.New(filepath.Join(t.TempDir(), "history.json"))
+	h := &Handler{ChatHistory: store}
+
+	entry, err := store.Start(chathistory.StartParams{
+		CallerID:  "caller:test",
+		AccountID: "account",
+		UserID:    1,
+		Model:     "deepseek-v4-pro-search",
+		UserInput: "hello",
+	})
+	if err != nil {
+		t.Fatalf("start history entry: %v", err)
+	}
+	entry, err = store.Update(entry.ID, chathistory.UpdateParams{
+		Status: "success",
+		Usage: map[string]any{
+			"prompt_tokens":     int64(1_000_000),
+			"completion_tokens": int64(1_000_000),
+			"total_tokens":      int64(2_000_000),
+		},
+		Completed: true,
+	})
+	if err != nil {
+		t.Fatalf("update history entry: %v", err)
+	}
+
+	file, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	day := time.UnixMilli(entry.CreatedAt).UTC().Format("2006-01-02")
+	stats := h.aggregateStats(file.Items, day, day, "", "", "", "")
+	if len(stats) != 1 {
+		t.Fatalf("expected one aggregate, got %d: %#v", len(stats), stats)
+	}
+	if stats[0].TotalCost < 1.3049 || stats[0].TotalCost > 1.3051 {
+		t.Fatalf("expected default pro search cost 1.305, got %#v", stats[0])
+	}
+}
+
 func addCompletedHistoryEntry(t *testing.T, store *chathistory.Store, userID, promptTokens, completionTokens int64) chathistory.Entry {
 	t.Helper()
 	return addCompletedHistoryEntryWithCaller(t, store, userID, "key", promptTokens, completionTokens)

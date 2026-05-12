@@ -23,8 +23,29 @@ type Handler struct {
 	pricing     config.PricingConfig // Cached pricing config
 }
 
+var defaultPricingModels = map[string]config.ModelPrice{
+	"deepseek-v4-flash": {
+		InputPricePer1M:  0.14,
+		OutputPricePer1M: 0.28,
+	},
+	"deepseek-v4-pro": {
+		InputPricePer1M:  0.435,
+		OutputPricePer1M: 0.87,
+	},
+	"deepseek-reasoner": {
+		InputPricePer1M:  0.435,
+		OutputPricePer1M: 0.87,
+	},
+}
+
 // SetPricing sets the pricing configuration
 func (h *Handler) SetPricing(p config.PricingConfig) {
+	if p.Currency == "" {
+		p.Currency = "USD"
+	}
+	if len(p.Models) == 0 {
+		p.Models = defaultPricingModels
+	}
 	h.pricing = p
 	config.Logger.Info("[analytics] pricing initialized",
 		"currency", p.Currency,
@@ -401,7 +422,7 @@ func (h *Handler) aggregateStats(
 			billablePromptTokens = entryTotalTokens
 		}
 
-		if (billablePromptTokens > 0 || billableCompletionTokens > 0) && h.pricing.Models != nil {
+		if billablePromptTokens > 0 || billableCompletionTokens > 0 {
 			if pricing, modelKey, ok := h.lookupModelPrice(item.Model); ok {
 				inputCost := float64(billablePromptTokens) / 1_000_000 * pricing.InputPricePer1M
 				outputCost := float64(billableCompletionTokens) / 1_000_000 * pricing.OutputPricePer1M
@@ -508,18 +529,22 @@ func callerTokenIDForAnalytics(token string) string {
 }
 
 func (h *Handler) lookupModelPrice(model string) (config.ModelPrice, string, bool) {
-	if h == nil || h.pricing.Models == nil {
+	if h == nil {
 		return config.ModelPrice{}, "", false
+	}
+	models := h.pricing.Models
+	if len(models) == 0 {
+		models = defaultPricingModels
 	}
 	modelKey := strings.ToLower(strings.TrimSpace(model))
 	if modelKey == "" {
 		return config.ModelPrice{}, "", false
 	}
-	if pricing, ok := h.pricing.Models[modelKey]; ok {
+	if pricing, ok := models[modelKey]; ok {
 		return pricing, modelKey, true
 	}
 	if baseKey := strings.TrimSuffix(modelKey, "-search"); baseKey != modelKey {
-		if pricing, ok := h.pricing.Models[baseKey]; ok {
+		if pricing, ok := models[baseKey]; ok {
 			return pricing, baseKey, true
 		}
 	}
