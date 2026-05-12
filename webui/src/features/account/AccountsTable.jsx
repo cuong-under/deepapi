@@ -107,7 +107,7 @@ export default function AccountsTable({
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className={clsx(
                                         "w-2 h-2 rounded-full shrink-0",
-                                        !isEnabled ? "bg-slate-500" :
+                                        !isEnabled ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
                                         acc.test_status === 'failed' ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" :
                                         isActive ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
                                         runtimeUnknown ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-amber-500"
@@ -168,7 +168,7 @@ export default function AccountsTable({
                                                 </span>
                                             )}
                                             {!isEnabled && (
-                                                <span className="font-mono bg-slate-500/10 text-slate-400 px-1.5 py-0.5 rounded text-[10px]">
+                                                <span className="font-mono bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded text-[10px]">
                                                     {t('accountManager.skippedByPool')}
                                                 </span>
                                             )}
@@ -197,8 +197,8 @@ export default function AccountsTable({
                                         className={clsx(
                                             "p-1 lg:p-1.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
                                             isEnabled
-                                                ? "text-emerald-500 hover:bg-emerald-500/10"
-                                                : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10"
+                                                ? "text-emerald-500 hover:text-red-500 hover:bg-red-500/10"
+                                                : "text-red-500 bg-red-500/10 hover:text-emerald-500 hover:bg-emerald-500/10"
                                         )}
                                         title={isEnabled ? t('accountManager.disableAccountTitle') : t('accountManager.enableAccountTitle')}
                                     >
