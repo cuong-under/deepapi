@@ -99,11 +99,11 @@ export default function AccountsTable({
                         const id = resolveAccountIdentifier(acc)
                         const assignedProxy = proxies.find(proxy => proxy.id === acc.proxy_id)
                         const runtimeUnknown = envBacked && !acc.test_status
-                        const isEnabled = acc.enabled !== false
+                        const isEnabled = !isDisabledValue(acc.enabled)
                         // Check if account has been refreshed (has last_refreshed_at timestamp)
                         const isActive = isEnabled && acc.last_refreshed_at != null
                         return (
-                            <div key={i} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/50 transition-colors">
+                            <div key={id || i} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/50 transition-colors">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className={clsx(
                                         "w-2 h-2 rounded-full shrink-0",
@@ -271,4 +271,13 @@ export default function AccountsTable({
             )}
         </div>
     )
+}
+
+function isDisabledValue(value) {
+    if (value === false || value === 0) return true
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase()
+        return normalized === 'false' || normalized === '0' || normalized === 'disabled'
+    }
+    return false
 }

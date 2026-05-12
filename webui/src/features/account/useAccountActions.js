@@ -372,6 +372,11 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, a
         if (!confirm(t(confirmKey))) return
 
         setTogglingAccount(prev => ({ ...prev, [accountID]: true }))
+        updateAccountInList?.(accountID, {
+            enabled,
+            last_refreshed_at: enabled ? account?.last_refreshed_at : null,
+            test_status: enabled ? account?.test_status : '',
+        })
         try {
             let res
             if (isMultiUser) {
@@ -397,17 +402,21 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, a
             const data = await readActionResponse(res)
             if (!res.ok || data.success === false) {
                 onMessage('error', data.detail || data.error || t('messages.requestFailed'))
+                updateAccountInList?.(accountID, {
+                    enabled: account?.enabled ?? true,
+                    last_refreshed_at: account?.last_refreshed_at,
+                    test_status: account?.test_status,
+                })
                 return
             }
             onMessage('success', enabled ? t('accountManager.enableAccountSuccess') : t('accountManager.disableAccountSuccess'))
-            updateAccountInList?.(accountID, {
-                enabled,
-                last_refreshed_at: enabled ? account?.last_refreshed_at : null,
-                test_status: enabled ? account?.test_status : '',
-            })
-            fetchAccounts()
             onRefresh()
         } catch (e) {
+            updateAccountInList?.(accountID, {
+                enabled: account?.enabled ?? true,
+                last_refreshed_at: account?.last_refreshed_at,
+                test_status: account?.test_status,
+            })
             onMessage('error', e.message || t('messages.networkError'))
         } finally {
             setTogglingAccount(prev => ({ ...prev, [accountID]: false }))

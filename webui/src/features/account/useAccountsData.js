@@ -11,6 +11,7 @@ export function useAccountsData({ apiFetch }) {
     const [totalPages, setTotalPages] = useState(1)
     const [totalAccounts, setTotalAccounts] = useState(0)
     const [loadingAccounts, setLoadingAccounts] = useState(false)
+    const [accountOverrides, setAccountOverrides] = useState({})
 
     const { isMultiUser, fetchAccounts: fetchMultiUserAccounts } = useMultiUserAccounts(apiFetch)
 
@@ -37,7 +38,7 @@ export function useAccountsData({ apiFetch }) {
                     query: targetQuery,
                 })
 
-                setAccounts(data.accounts || [])
+                setAccounts(applyAccountOverrides(data.accounts || [], accountOverrides, true))
                 setTotalPages(data.total_pages || 1)
                 setTotalAccounts(data.total || 0)
                 setPage(data.page || targetPage)
@@ -48,7 +49,7 @@ export function useAccountsData({ apiFetch }) {
                 const res = await apiFetch(url)
                 if (res.ok) {
                     const data = await res.json()
-                    setAccounts(data.items || [])
+                    setAccounts(applyAccountOverrides(data.items || [], accountOverrides, false))
                     setTotalPages(data.total_pages || 1)
                     setTotalAccounts(data.total || 0)
                     setPage(data.page || 1)
@@ -79,6 +80,10 @@ export function useAccountsData({ apiFetch }) {
                 ? String(acc.id || '')
                 : String(acc.identifier || acc.email || acc.mobile || '').trim()
             return id === targetID ? { ...acc, ...patch } : acc
+        }))
+        setAccountOverrides(prev => ({
+            ...prev,
+            [targetID]: { ...(prev[targetID] || {}), ...patch },
         }))
     }
 
@@ -123,4 +128,14 @@ export function useAccountsData({ apiFetch }) {
         searchQuery,
         handleSearchChange,
     }
+}
+
+function applyAccountOverrides(accounts, overrides, isMultiUser) {
+    if (!overrides || Object.keys(overrides).length === 0) return accounts
+    return accounts.map(acc => {
+        const id = isMultiUser
+            ? String(acc.id || '')
+            : String(acc.identifier || acc.email || acc.mobile || '').trim()
+        return overrides[id] ? { ...acc, ...overrides[id] } : acc
+    })
 }
