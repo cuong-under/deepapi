@@ -255,6 +255,50 @@ func TestExecuteNonStreamWithRetryUsesParentMessageForEmptyRetry(t *testing.T) {
 	}
 }
 
+func TestExecuteNonStreamWithRetryFallsBackWithoutSearchAfterEmptySearchOutput(t *testing.T) {
+	ds := &fakeDeepSeekCaller{responses: []*http.Response{
+		sseHTTPResponse(http.StatusOK, `data: {"response_message_id":77,"p":"response/thinking_content","v":"search plan"}`),
+		sseHTTPResponse(http.StatusOK, `data: {"response_message_id":78,"p":"response/thinking_content","v":"still empty"}`),
+		sseHTTPResponse(http.StatusOK, `data: {"response_message_id":79,"p":"response/content","v":"ok without search"}`),
+	}}
+	stdReq := promptcompat.StandardRequest{
+		Surface:         "test",
+		RequestedModel:  "deepseek-v4-pro-search",
+		ResolvedModel:   "deepseek-v4-pro-search",
+		ResponseModel:   "deepseek-v4-pro-search",
+		PromptTokenText: "prompt",
+		FinalPrompt:     "final prompt",
+		Thinking:        true,
+		Search:          true,
+	}
+
+	result, outErr := ExecuteNonStreamWithRetry(context.Background(), ds, &auth.RequestAuth{}, stdReq, Options{
+		RetryEnabled:     true,
+		RetryMaxAttempts: 1,
+	})
+	if outErr != nil {
+		t.Fatalf("unexpected output error: %#v", outErr)
+	}
+	if result.Turn.Text != "ok without search" {
+		t.Fatalf("fallback text mismatch: %q", result.Turn.Text)
+	}
+	if len(ds.payloads) != 3 {
+		t.Fatalf("expected initial, empty retry, and search fallback payloads, got %d", len(ds.payloads))
+	}
+	if got := ds.payloads[0]["search_enabled"]; got != true {
+		t.Fatalf("expected initial search enabled, got %#v", got)
+	}
+	if got := ds.payloads[1]["search_enabled"]; got != true {
+		t.Fatalf("expected empty retry to keep search enabled, got %#v", got)
+	}
+	if got := ds.payloads[2]["search_enabled"]; got != false {
+		t.Fatalf("expected fallback to disable search, got %#v", got)
+	}
+	if got := ds.payloads[2]["parent_message_id"]; got != nil {
+		t.Fatalf("expected fallback to start fresh without parent message, got %#v", got)
+	}
+}
+
 func TestExecuteNonStreamWithRetryConvertsReferenceMarkers(t *testing.T) {
 	ds := &fakeDeepSeekCaller{responses: []*http.Response{sseHTTPResponse(
 		http.StatusOK,

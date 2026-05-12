@@ -11,6 +11,7 @@ import (
 	"ds2api/internal/auth"
 	"ds2api/internal/config"
 	"ds2api/internal/httpapi/openai/shared"
+	"ds2api/internal/promptcompat"
 )
 
 func TestExecuteStreamWithRetryUsesSharedRetryPayloadAndUsagePrompt(t *testing.T) {
@@ -146,5 +147,69 @@ func TestExecuteStreamWithRetrySwitchesManagedAccountBeforeFinal429(t *testing.T
 	}
 	if prompt, _ := ds.payloads[1]["prompt"].(string); strings.Contains(prompt, shared.EmptyOutputRetrySuffix) {
 		t.Fatalf("expected switched-account prompt without empty-output suffix, got %q", prompt)
+	}
+}
+
+func TestExecuteStreamWithRetryFallsBackWithoutSearchAfterEmptySearchOutput(t *testing.T) {
+	ds := &fakeDeepSeekCaller{responses: []*http.Response{
+		sseHTTPResponse(http.StatusOK, `data: {"response_message_id":78,"p":"response/thinking_content","v":"retry empty"}`),
+		sseHTTPResponse(http.StatusOK, `data: {"response_message_id":79,"p":"response/content","v":"ok without search"}`),
+	}}
+	initial := sseHTTPResponse(http.StatusOK, `data: {"response_message_id":77,"p":"response/thinking_content","v":"search empty"}`)
+	payload := map[string]any{"prompt": "original prompt", "chat_session_id": "session-1", "search_enabled": true}
+	attemptsSeen := 0
+	searchFallbackSession := ""
+
+	ExecuteStreamWithRetry(context.Background(), ds, &auth.RequestAuth{}, initial, payload, "pow", StreamRetryOptions{
+		Surface:          "test.stream",
+		Stream:           true,
+		RetryEnabled:     true,
+		RetryMaxAttempts: 1,
+		UsagePrompt:      "original prompt",
+		Request: promptcompat.StandardRequest{
+			Search: true,
+		},
+	}, StreamRetryHooks{
+		ConsumeAttempt: func(resp *http.Response, allowDeferEmpty bool) (bool, bool) {
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					t.Fatalf("close failed: %v", err)
+				}
+			}()
+			body, _ := io.ReadAll(resp.Body)
+			attemptsSeen++
+			if strings.Contains(string(body), "ok without search") {
+				return true, false
+			}
+			if !allowDeferEmpty {
+				t.Fatalf("expected empty attempt %d to be deferred before fallback", attemptsSeen)
+			}
+			return false, true
+		},
+		ParentMessageID: func() int {
+			return 76 + attemptsSeen
+		},
+		OnSearchFallback: func(sessionID string) {
+			searchFallbackSession = sessionID
+		},
+	})
+
+	if attemptsSeen != 3 {
+		t.Fatalf("expected three stream attempts, got %d", attemptsSeen)
+	}
+	if searchFallbackSession != "session-1" {
+		t.Fatalf("expected search fallback session id, got %q", searchFallbackSession)
+	}
+	if len(ds.payloads) != 2 {
+		t.Fatalf("expected empty retry and search fallback payloads, got %d", len(ds.payloads))
+	}
+	if got := ds.payloads[0]["search_enabled"]; got != true {
+		t.Fatalf("expected empty retry to keep search enabled, got %#v", got)
+	}
+	if got := ds.payloads[1]["search_enabled"]; got != false {
+		t.Fatalf("expected fallback to disable search, got %#v", got)
+	}
+	if got := ds.payloads[1]["parent_message_id"]; got != nil {
+		t.Fatalf("expected fallback to start fresh without parent message, got %#v", got)
 	}
 }

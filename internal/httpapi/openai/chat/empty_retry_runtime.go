@@ -103,6 +103,12 @@ func (h *Handler) handleStreamWithRetry(w http.ResponseWriter, r *http.Request, 
 				*sessionIDRef = sessionID
 			}
 		},
+		OnSearchFallback: func(sessionID string) {
+			if sessionIDRef != nil {
+				*sessionIDRef = sessionID
+			}
+			streamRuntime.searchEnabled = false
+		},
 		OnTerminal: func(attempts int) {
 			logChatStreamTerminal(streamRuntime, attempts)
 		},

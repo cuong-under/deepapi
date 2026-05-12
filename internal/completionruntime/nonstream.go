@@ -105,6 +105,7 @@ func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds DeepSeekCaller, a 
 
 	attempts := 0
 	accountSwitchAttempted := false
+	searchFallbackAttempted := false
 	currentResp := start.Response
 	usagePrompt := stdReq.PromptTokenText
 	accumulatedThinking := ""
@@ -153,6 +154,25 @@ func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds DeepSeekCaller, a 
 			retryMax = shared.EmptyOutputRetryMaxAttempts()
 		}
 		if !opts.RetryEnabled || !assistantturn.ShouldRetryEmptyOutput(turn, attempts, retryMax) {
+			if canRetryWithoutSearch(stdReq, turn, &searchFallbackAttempted) {
+				fallback, fallbackErr := startStandardCompletionWithoutSearch(ctx, ds, a, stdReq, opts, maxAttempts)
+				if fallbackErr != nil {
+					return NonStreamResult{SessionID: sessionID, Payload: payload, Turn: turn, Attempts: attempts}, fallbackErr
+				}
+				if fallback.Response != nil {
+					config.Logger.Info("[completion_runtime_search_fallback] retrying without search after empty output", "surface", stdReq.Surface, "stream", false)
+					sessionID = fallback.SessionID
+					payload = fallback.Payload
+					pow = fallback.Pow
+					currentResp = fallback.Response
+					stdReq.Search = false
+					usagePrompt = stdReq.PromptTokenText
+					accumulatedThinking = ""
+					accumulatedRawThinking = ""
+					accumulatedToolDetectionThinking = ""
+					continue
+				}
+			}
 			if canRetryOnAlternateAccount(ctx, a, turn.Error, opts.RetryEnabled, &accountSwitchAttempted) {
 				switched, switchErr := startStandardCompletionOnAlternateAccount(ctx, ds, a, stdReq, opts, maxAttempts)
 				if switchErr != nil {
@@ -191,6 +211,22 @@ func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds DeepSeekCaller, a 
 	}
 }
 
+func canRetryWithoutSearch(stdReq promptcompat.StandardRequest, turn assistantturn.Turn, attempted *bool) bool {
+	if attempted == nil || *attempted || !stdReq.Search {
+		return false
+	}
+	if turn.ContentFilter || len(turn.ToolCalls) > 0 || strings.TrimSpace(turn.Text) != "" {
+		return false
+	}
+	*attempted = true
+	return true
+}
+
+func startStandardCompletionWithoutSearch(ctx context.Context, ds DeepSeekCaller, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, opts Options, maxAttempts int) (StartResult, *assistantturn.OutputError) {
+	stdReq.Search = false
+	return startStandardCompletion(ctx, ds, a, stdReq, opts, maxAttempts)
+}
+
 func canRetryOnAlternateAccount(ctx context.Context, a *auth.RequestAuth, outErr *assistantturn.OutputError, retryEnabled bool, attempted *bool) bool {
 	if outErr == nil || outErr.Status != http.StatusTooManyRequests {
 		return false
@@ -206,6 +242,10 @@ func canRetryOnAlternateAccount(ctx context.Context, a *auth.RequestAuth, outErr
 }
 
 func startStandardCompletionOnAlternateAccount(ctx context.Context, ds DeepSeekCaller, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, opts Options, maxAttempts int) (StartResult, *assistantturn.OutputError) {
+	return startStandardCompletion(ctx, ds, a, stdReq, opts, maxAttempts)
+}
+
+func startStandardCompletion(ctx context.Context, ds DeepSeekCaller, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, opts Options, maxAttempts int) (StartResult, *assistantturn.OutputError) {
 	var prepErr *assistantturn.OutputError
 	stdReq, prepErr = reuploadCurrentInputFileForAccount(ctx, ds, a, stdReq, opts)
 	if prepErr != nil {

@@ -26,14 +26,15 @@ type StreamRetryOptions struct {
 }
 
 type StreamRetryHooks struct {
-	ConsumeAttempt  func(resp *http.Response, allowDeferEmpty bool) (terminalWritten bool, retryable bool)
-	Finalize        func(attempts int)
-	ParentMessageID func() int
-	OnRetry         func(attempts int)
-	OnRetryPrompt   func(prompt string)
-	OnRetryFailure  func(status int, message, code string)
-	OnAccountSwitch func(sessionID string)
-	OnTerminal      func(attempts int)
+	ConsumeAttempt   func(resp *http.Response, allowDeferEmpty bool) (terminalWritten bool, retryable bool)
+	Finalize         func(attempts int)
+	ParentMessageID  func() int
+	OnRetry          func(attempts int)
+	OnRetryPrompt    func(prompt string)
+	OnRetryFailure   func(status int, message, code string)
+	OnAccountSwitch  func(sessionID string)
+	OnSearchFallback func(sessionID string)
+	OnTerminal       func(attempts int)
 }
 
 func ExecuteStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.RequestAuth, initialResp *http.Response, payload map[string]any, pow string, opts StreamRetryOptions, hooks StreamRetryHooks) {
@@ -55,11 +56,13 @@ func ExecuteStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.Requ
 
 	attempts := 0
 	accountSwitchAttempted := false
+	searchFallbackAttempted := false
 	currentResp := initialResp
 	currentPayload := clonePayload(payload)
 	for {
 		allowAccountSwitch := opts.RetryEnabled && attempts >= retryMax && !accountSwitchAttempted && a != nil && a.UseConfigToken
-		terminalWritten, retryable := hooks.ConsumeAttempt(currentResp, opts.RetryEnabled && (attempts < retryMax || allowAccountSwitch))
+		allowSearchFallback := opts.RetryEnabled && attempts >= retryMax && opts.Request.Search && !searchFallbackAttempted
+		terminalWritten, retryable := hooks.ConsumeAttempt(currentResp, opts.RetryEnabled && (attempts < retryMax || allowSearchFallback || allowAccountSwitch))
 		if terminalWritten {
 			if hooks.OnTerminal != nil {
 				hooks.OnTerminal(attempts)
@@ -74,6 +77,28 @@ func ExecuteStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.Requ
 		}
 
 		if attempts >= retryMax {
+			if canRetryStreamWithoutSearch(opts.Request, &searchFallbackAttempted) {
+				fallback, fallbackErr := startPayloadCompletionWithoutSearch(ctx, ds, a, payload, opts, maxAttempts)
+				if fallbackErr != nil {
+					if hooks.OnRetryFailure != nil {
+						hooks.OnRetryFailure(fallbackErr.Status, fallbackErr.Message, fallbackErr.Code)
+					}
+					return
+				}
+				if fallback.Response != nil {
+					config.Logger.Info("[completion_runtime_search_fallback] retrying without search after empty output", "surface", surface, "stream", opts.Stream)
+					currentResp = fallback.Response
+					currentPayload = fallback.Payload
+					pow = fallback.Pow
+					if hooks.OnSearchFallback != nil {
+						hooks.OnSearchFallback(fallback.SessionID)
+					}
+					if hooks.OnRetryPrompt != nil {
+						hooks.OnRetryPrompt(opts.UsagePrompt)
+					}
+					continue
+				}
+			}
 			if canRetryOnAlternateAccount(ctx, a, &assistantturn.OutputError{Status: http.StatusTooManyRequests}, opts.RetryEnabled, &accountSwitchAttempted) {
 				switched, switchErr := startPayloadCompletionOnAlternateAccount(ctx, ds, a, payload, opts, maxAttempts)
 				if switchErr != nil {
@@ -146,7 +171,33 @@ func ExecuteStreamWithRetry(ctx context.Context, ds DeepSeekCaller, a *auth.Requ
 	}
 }
 
+func canRetryStreamWithoutSearch(stdReq promptcompat.StandardRequest, attempted *bool) bool {
+	if attempted == nil || *attempted || !stdReq.Search {
+		return false
+	}
+	*attempted = true
+	return true
+}
+
+func startPayloadCompletionWithoutSearch(ctx context.Context, ds DeepSeekCaller, a *auth.RequestAuth, payload map[string]any, opts StreamRetryOptions, maxAttempts int) (StartResult, *assistantturn.OutputError) {
+	nextOpts := opts
+	nextOpts.Request.Search = false
+	start, err := startPayloadCompletion(ctx, ds, a, payload, nextOpts, maxAttempts)
+	if err != nil {
+		return start, err
+	}
+	if start.Payload != nil {
+		start.Payload["search_enabled"] = false
+		delete(start.Payload, "parent_message_id")
+	}
+	return start, nil
+}
+
 func startPayloadCompletionOnAlternateAccount(ctx context.Context, ds DeepSeekCaller, a *auth.RequestAuth, payload map[string]any, opts StreamRetryOptions, maxAttempts int) (StartResult, *assistantturn.OutputError) {
+	return startPayloadCompletion(ctx, ds, a, payload, opts, maxAttempts)
+}
+
+func startPayloadCompletion(ctx context.Context, ds DeepSeekCaller, a *auth.RequestAuth, payload map[string]any, opts StreamRetryOptions, maxAttempts int) (StartResult, *assistantturn.OutputError) {
 	sessionID, err := ds.CreateSession(ctx, a, maxAttempts)
 	if err != nil {
 		return StartResult{}, authOutputError(a)
@@ -165,6 +216,7 @@ func startPayloadCompletionOnAlternateAccount(ctx context.Context, ds DeepSeekCa
 	}
 	nextPayload["chat_session_id"] = sessionID
 	delete(nextPayload, "parent_message_id")
+	nextPayload["search_enabled"] = opts.Request.Search
 	resp, err := ds.CallCompletion(ctx, a, nextPayload, pow, maxAttempts)
 	if err != nil {
 		return StartResult{SessionID: sessionID, Payload: nextPayload, Pow: pow}, &assistantturn.OutputError{Status: http.StatusInternalServerError, Message: "Failed to get completion.", Code: "error"}
